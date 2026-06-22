@@ -69,8 +69,19 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-ap
   </div>
 </div>
 
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script>
+// ==================== 纯 CSV 导出（无需外部库） ====================
+function exportCSV(rows,filename){
+  const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const BOM='\uFEFF';
+  const blob=new Blob([BOM+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 // ==================== 帧差法 客流统计 ====================
 let totalCount=0, youngCount=0, hourCount=0;
 let counting=false, hourly={}, currentHour=new Date().getHours();
@@ -293,9 +304,8 @@ function exportExcel(){
   hours.forEach(h=>{const d=hourly[h];rows.push([h,d.total||0,d.young||0,d.total>0?((d.young||0)/d.total*100).toFixed(1)+'%':'0%']);});
   const ti=hours.reduce((s,h)=>s+(hourly[h].total||0),0),ty=hours.reduce((s,h)=>s+(hourly[h].young||0),0);
   rows.push(['合计',ti,ty,ti>0?(ty/ti*100).toFixed(1)+'%':'0%']);
-  const ws=XLSX.utils.aoa_to_sheet(rows),wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'客流统计');
-  XLSX.writeFile(wb,`客流统计_${new Date().getMonth()+1}月${new Date().getDate()}日.xlsx`);
+  exportCSV(rows,'客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');
+  document.getElementById('log').textContent='已导出CSV(可用Excel打开)';
 }
 
 startCam();
