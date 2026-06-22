@@ -1,24 +1,37 @@
 {
   "expo": {
-    "name": "CrowdCounter",
+    "name": "客流统计",
     "slug": "CrowdCounter",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "需要使用摄像头进行客流量统计（不采集人脸信息）",
+          "microphonePermission": false
+        }
+      ]
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "本应用使用摄像头统计客流量人数，不采集、不存储任何人脸信息。",
+        "UIBackgroundModes": ["fetch", "processing"],
+        "NSMicrophoneUsageDescription": false
+      },
+      "bundleIdentifier": "com.crowdcounter.app"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0A0A1A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      },
+      "permissions": ["CAMERA"]
     }
   }
 }

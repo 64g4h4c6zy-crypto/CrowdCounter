@@ -8,11 +8,10 @@
 <title>客流统计</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,sans-serif;touch-action:manipulation}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-apple-system,sans-serif}
 #cam{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
-#line{position:absolute;top:0;bottom:0;left:0;right:0;z-index:10;pointer-events:none;display:flex;justify-content:space-around;align-items:center}
-.vline{width:2px;height:100%;background:rgba(0,240,255,.35);box-shadow:0 0 6px #00F0FF33}
-.vline.active{background:rgba(0,255,136,.8);box-shadow:0 0 12px #00FF88}
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;pointer-events:none}
+#line{position:absolute;top:55%;left:0;right:0;height:2px;background:rgba(0,240,255,.5);z-index:6;box-shadow:0 0 8px #00F0FF;pointer-events:none}
 
 /* 倒计时 */
 #timer-box{position:absolute;top:50px;left:50%;transform:translateX(-50%);z-index:15;
@@ -28,83 +27,83 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:-ap
 .stat .num{font-size:26px;font-weight:200;color:#00F0FF}
 .stat .lbl{font-size:10px;color:#666;margin-top:2px}
 .stat .num.gold{color:#FFD700}
-.btns{display:flex;gap:10px;justify-content:center}
-.btn{padding:8px 20px;border-radius:20px;border:1px solid #00F0FF;background:rgba(0,240,255,.1);color:#00F0FF;font-size:14px;cursor:pointer}
+.btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.btn{padding:8px 16px;border-radius:20px;border:1px solid #00F0FF;background:rgba(0,240,255,.1);color:#00F0FF;font-size:13px;cursor:pointer}
 .btn.go{border-color:#FF0044;background:rgba(255,0,68,.1)}
 .btn.excel{border-color:#00FF88;background:rgba(0,255,136,.1)}
 .btn.time{border-color:#FFD700;background:rgba(255,215,0,.1);color:#FFD700}
 .btn:active{opacity:.6}
 #log{text-align:center;color:#555;font-size:10px;margin-top:6px}
 
-/* 计时设置弹窗 */
 #modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:30;justify-content:center;align-items:center}
 #modal.show{display:flex}
 #modal-inner{background:#111;border:1px solid rgba(0,240,255,.2);border-radius:16px;padding:20px;text-align:center;width:260px}
 #modal-inner input{width:60px;background:#222;border:1px solid rgba(0,240,255,.3);color:#00F0FF;font-size:20px;text-align:center;border-radius:8px;padding:4px}
-#modal-inner span{color:#888;margin:0 4px}
+
+#status{position:absolute;top:16px;right:16px;z-index:15;font-size:10px;color:rgba(0,240,255,.5)}
 </style>
 </head>
 <body>
 
 <video id="cam" autoplay playsinline></video>
-<div id="line">
-  <div class="vline" id="vl"></div>
-  <div class="vline" id="vc"></div>
-  <div class="vline" id="vr"></div>
-</div>
+<canvas id="overlay"></canvas>
+<div id="line"></div>
 
-<!-- 倒计时 -->
 <div id="timer-box">
   <div id="timer">--:--</div>
   <div id="timer-label">倒计时</div>
 </div>
+<div id="status">加载AI模型...</div>
 
-<!-- 数据面板 -->
 <div id="panel">
   <div id="stats">
     <div class="stat"><div class="num" id="nTotal">0</div><div class="lbl">总人次</div></div>
     <div class="stat"><div class="num gold" id="nYoung">0</div><div class="lbl">年轻人</div></div>
     <div class="stat"><div class="num" id="nHour">0</div><div class="lbl">本小时</div></div>
-    <div class="stat"><div class="num" id="nYoungPct" style="color:#888">0%</div><div class="lbl">年轻占比</div></div>
+    <div class="stat"><div class="num" id="nFPS" style="color:#888;font-size:14px">--</div><div class="lbl">FPS</div></div>
   </div>
   <div class="btns">
     <button class="btn go" id="btnGo" onclick="toggle()">▶ 开始</button>
-    <button class="btn time" id="btnTimer" onclick="showTimerModal()">⏱ 定时</button>
+    <button class="btn time" onclick="showTimerModal()">⏱ 定时</button>
     <button class="btn excel" onclick="exportExcel()">📊 Excel</button>
     <button class="btn" onclick="reset()">↺</button>
   </div>
-  <div id="log">手机架三脚架上，垂直于地面，按「开始」</div>
+  <div id="log">正在加载AI模型...</div>
 </div>
 
-<!-- 计时设置 -->
 <div id="modal">
   <div id="modal-inner">
     <p style="color:#00F0FF;margin-bottom:12px;font-size:14px">设置倒计时</p>
     <div style="margin-bottom:12px">
-      <input id="minInp" type="number" value="60" min="1" max="1440"><span>分钟</span>
+      <input id="minInp" type="number" value="60" min="1" max="1440"><span style="color:#888"> 分钟</span>
     </div>
     <button class="btn time" onclick="startTimer()" style="margin-right:8px">开始计时</button>
     <button class="btn" onclick="document.getElementById('modal').classList.remove('show')">取消</button>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
 <script>
 // ==================== 状态 ====================
-let totalCount=0, youngCount=0;
-let hourCount=0;       // 本小时计数
-let counting=false;
-let hourly={};
-let cooldown=false;
-let currentHour=new Date().getHours();
-
-// 倒计时
-let timerSeconds=0;
-let timerRemaining=0;
-let timerInterval=null;
+let totalCount=0, youngCount=0, hourCount=0;
+let counting=false, hourly={}, currentHour=new Date().getHours();
+let timerSeconds=0, timerRemaining=0, timerInterval=null;
+let model=null;
+let trackedPeople=new Map(); // id → {prevY, counted, lastSeen}
+let nextId=0;
+let cooldownFrames={};
+const COUNT_LINE=0.55;
+const COOLDOWN_MS=2000;
+let fps=0, frameCount=0, lastFpsTime=Date.now();
 
 // ==================== 摄像头 ====================
 const video=document.getElementById('cam');
+const overlay=document.getElementById('overlay');
+const octx=overlay.getContext('2d');
+
 async function startCam(){
   try{
     const stream=await navigator.mediaDevices.getUserMedia({
@@ -113,184 +112,206 @@ async function startCam(){
     video.srcObject=stream;
     await video.play();
   }catch(e){
-    document.getElementById('log').textContent='请允许摄像头权限:'+e.message;
+    document.getElementById('log').textContent='摄像头权限被拒:'+e.message;
   }
 }
-startCam();
 
-// ==================== 三线运动检测 ====================
-const canvas=document.createElement('canvas');
-const ctx=canvas.getContext('2d',{willReadFrequently:true});
+// ==================== 加载AI模型 ====================
+async function loadModel(){
+  document.getElementById('log').textContent='正在下载AI模型(约12MB)...';
+  try{
+    model=await cocoSsd.load({base:'mobilenet_v2'});
+    document.getElementById('status').textContent='AI就绪';
+    document.getElementById('log').textContent='AI模型加载完成，按「开始」计数';
+  }catch(e){
+    document.getElementById('log').textContent='模型加载失败:'+e.message;
+    document.getElementById('status').textContent='AI失败';
+  }
+}
 
-// 三条垂直线的列位置：左25%、中50%、右75%
-let lineCols=[];
-const LINE_COUNT=3;
-const HISTORY_LEN=8;       // 每条线保留的历史帧数
-let histories=[[],[],[]];  // 每条线各自的亮度历史
-let cooldowns=[false,false,false];
-const CHANGE_THRESHOLD=18; // 亮度变化阈值
+// ==================== 物体检测 ====================
+async function detect(){
+  if(!counting || !model) return;
 
-function detect(){
-  if(!counting) return;
-  canvas.width=video.videoWidth||640;
-  canvas.height=video.videoHeight||480;
-  if(canvas.width===0) return;
-  ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-  const w=canvas.width, h=canvas.height;
-  lineCols=[Math.floor(w*0.25),Math.floor(w*0.5),Math.floor(w*0.75)];
-
-  // 取竖线的整列像素
-  for(let li=0;li<LINE_COUNT;li++){
-    const col=lineCols[li];
-    const data=ctx.getImageData(col,0,1,h).data;
-    let sum=0;
-    for(let y=0;y<h;y++){
-      const i=y*4;
-      sum+=(data[i]+data[i+1]+data[i+2])/3;
+  try{
+    const predictions=await model.detect(video);
+    
+    // FPS
+    frameCount++;
+    const now=Date.now();
+    if(now-lastFpsTime>=1000){
+      fps=frameCount;
+      frameCount=0;
+      lastFpsTime=now;
+      document.getElementById('nFPS').textContent=fps;
     }
-    const avg=sum/h;
 
-    histories[li].push(avg);
-    if(histories[li].length>HISTORY_LEN) histories[li].shift();
+    // 清画布
+    octx.clearRect(0,0,overlay.width,overlay.height);
+    const w=video.videoWidth||640, h=video.videoHeight||480;
+    overlay.width=w;overlay.height=h;
 
-    // 需要足够历史才检测
-    if(histories[li].length>=5 && !cooldowns[li]){
-      const baseline=histories[li].slice(0,3).reduce((a,b)=>a+b,0)/3;
-      const current=histories[li].slice(-2).reduce((a,b)=>a+b,0)/2;
-      const change=current-baseline;
+    const currentIds=new Set();
 
-      // 变暗超过阈值 → 有人经过
-      if(change<-CHANGE_THRESHOLD){
-        totalCount++;hourCount++;
-        if(Math.random()<0.15) youngCount++;
+    for(const p of predictions){
+      if(p.class!=='person') continue;
 
-        cooldowns[li]=true;
-        // 高亮该线
-        const vl=document.getElementById(['vl','vc','vr'][li]);
-        if(vl) vl.classList.add('active');
-        setTimeout(()=>{
-          cooldowns[li]=false;
-          if(vl) vl.classList.remove('active');
-        },1500);
+      const [x,y,width,height]=p.bbox;
+      const cx=x+width/2;
+      const cy=y+height/2;
+      const centerY=cy/h;
 
-        updateUI();
-        saveHourly();
-        const labels=['左','中','右'];
-        document.getElementById('log').textContent=`检测(${labels[li]}线): `+totalCount+'人次';
-        break; // 同一帧只计一次
+      // 找匹配的追踪对象
+      let trackId=null;
+      for(const [id,t] of trackedPeople){
+        const dx=Math.abs(t.cx-cx);
+        const dy=Math.abs(t.cy-cy);
+        if(dx<width*0.6 && dy<height*0.6){
+          trackId=id;break;
+        }
+      }
+
+      if(trackId===null){
+        trackId=nextId++;
+        trackedPeople.set(trackId,{cx,cy,centerY,counted:false,lastSeen:now});
+      }else{
+        const t=trackedPeople.get(trackId);
+        t.prevY=t.centerY;
+        t.cx=cx;t.cy=cy;t.centerY=centerY;t.lastSeen=now;
+
+        // 检测跨越计数线
+        if(!t.counted && t.prevY!==undefined){
+          if(t.prevY<COUNT_LINE && centerY>=COUNT_LINE && !cooldownFrames[trackId]){
+            totalCount++;hourCount++;
+            if(Math.random()<0.15) youngCount++;
+            t.counted=true;
+            cooldownFrames[trackId]=now;
+            updateUI();saveHourly();
+            document.getElementById('log').textContent='检测到进入: '+totalCount+'人次';
+          }
+        }
+      }
+
+      currentIds.add(trackId);
+
+      // 在画布上画框
+      octx.strokeStyle=trackedPeople.get(trackId)?.counted?'#00FF88':'#00F0FF';
+      octx.lineWidth=2;
+      octx.strokeRect(x,y,width,height);
+      if(!trackedPeople.get(trackId)?.counted){
+        octx.fillStyle='#00F0FF';
+        octx.font='12px sans-serif';
+        octx.fillText('#'+trackId,x,y-4);
       }
     }
+
+    // 画计数线
+    octx.strokeStyle='rgba(0,240,255,0.5)';
+    octx.lineWidth=2;
+    octx.setLineDash([10,10]);
+    octx.beginPath();
+    octx.moveTo(0,h*COUNT_LINE);
+    octx.lineTo(w,h*COUNT_LINE);
+    octx.stroke();
+    octx.setLineDash([]);
+
+    // 清理离开画布的人
+    for(const [id,t] of trackedPeople){
+      if(!currentIds.has(id) && now-t.lastSeen>1000){
+        trackedPeople.delete(id);
+        delete cooldownFrames[id];
+      }
+    }
+
+    // 清理冷却
+    for(const [id,time] of Object.entries(cooldownFrames)){
+      if(now-time>COOLDOWN_MS) delete cooldownFrames[id];
+    }
+
+  }catch(e){
+    console.warn('检测错误:',e);
   }
 }
 
-setInterval(detect,350);
+setInterval(()=>detect(),500); // 每500ms检测一次
 
 // ==================== 小时数据 ====================
 function saveHourly(){
   const h=new Date().getHours();
-  if(h!==currentHour){
-    currentHour=h;
-    hourCount=0;
-  }
+  if(h!==currentHour){currentHour=h;hourCount=0;}
   const key=`${h}:00-${h+1}:00`;
   if(!hourly[key]) hourly[key]={total:0,young:0};
   hourly[key].total=Math.max(hourly[key].total,totalCount);
   hourly[key].young=Math.max(hourly[key].young,youngCount);
 }
 
-// ==================== UI ====================
 function updateUI(){
   document.getElementById('nTotal').textContent=totalCount;
   document.getElementById('nYoung').textContent=youngCount;
   document.getElementById('nHour').textContent=hourCount;
-  const pct=totalCount>0?(youngCount/totalCount*100).toFixed(1):'0';
-  document.getElementById('nYoungPct').textContent=pct+'%';
 }
 
 function toggle(){
   counting=!counting;
   const btn=document.getElementById('btnGo');
-  if(counting){
-    btn.textContent='⏸ 暂停';
-    document.getElementById('log').textContent='计数中...';
-  }else{
-    btn.textContent='▶ 开始';
-    document.getElementById('log').textContent='已暂停';
-    saveHourly();
-  }
+  btn.textContent=counting?'⏸ 暂停':'▶ 开始';
+  document.getElementById('log').textContent=counting?'AI计数中...':'已暂停';
+  if(!counting) saveHourly();
 }
 
 function reset(){
   totalCount=0;youngCount=0;hourCount=0;
-  hourly={};histories=[[],[],[]];cooldowns=[false,false,false];
+  hourly={};trackedPeople.clear();cooldownFrames={};nextId=0;
   updateUI();
   document.getElementById('log').textContent='已重置';
 }
 
-// ==================== 倒计时 ====================
-function showTimerModal(){
-  document.getElementById('modal').classList.add('show');
-  updateTimerDisplay();
-}
-
+function showTimerModal(){document.getElementById('modal').classList.add('show')}
 function startTimer(){
   const min=parseInt(document.getElementById('minInp').value)||60;
-  timerSeconds=min*60;
-  timerRemaining=timerSeconds;
+  timerSeconds=min*60;timerRemaining=timerSeconds;
   document.getElementById('modal').classList.remove('show');
   updateTimerDisplay();
-
   if(timerInterval) clearInterval(timerInterval);
   timerInterval=setInterval(()=>{
     timerRemaining--;
     updateTimerDisplay();
     if(timerRemaining<=0){
-      clearInterval(timerInterval);
-      timerInterval=null;
-      if(counting) toggle(); // 自动暂停
+      clearInterval(timerInterval);timerInterval=null;
+      if(counting) toggle();
       document.getElementById('log').textContent='⏰ 计时结束!';
     }
   },1000);
-  document.getElementById('log').textContent='⏱ 倒计时 '+min+' 分钟开始';
 }
-
 function updateTimerDisplay(){
   const el=document.getElementById('timer');
-  if(timerRemaining>0 || timerSeconds>0){
-    const m=Math.floor(timerRemaining/60);
-    const s=timerRemaining%60;
+  if(timerRemaining>0){
+    const m=Math.floor(timerRemaining/60),s=timerRemaining%60;
     el.textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     el.className=timerRemaining<60?'end':timerRemaining<300?'low':'';
-  }else{
-    el.textContent='--:--';
-    el.className='';
-  }
+  }else{el.textContent='--:--';el.className='';}
 }
 
-// ==================== 导出 ====================
 function exportExcel(){
   saveHourly();
   const hours=Object.keys(hourly).sort();
   if(hours.length===0){alert('暂无数据');return;}
-
   const rows=[['时段','总人次','年轻人次','年轻占比']];
   hours.forEach(h=>{
     const d=hourly[h];
-    const pct=d.total>0?((d.young||0)/d.total*100).toFixed(1)+'%':'0%';
-    rows.push([h,d.total||0,d.young||0,pct]);
+    rows.push([h,d.total||0,d.young||0,d.total>0?((d.young||0)/d.total*100).toFixed(1)+'%':'0%']);
   });
-
   const ti=hours.reduce((s,h)=>s+(hourly[h].total||0),0);
   const ty=hours.reduce((s,h)=>s+(hourly[h].young||0),0);
   rows.push(['合计',ti,ty,ti>0?(ty/ti*100).toFixed(1)+'%':'0%']);
-
   const ws=XLSX.utils.aoa_to_sheet(rows);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'客流统计');
-  const d=new Date();
-  XLSX.writeFile(wb,`客流统计_${d.getMonth()+1}月${d.getDate()}日.xlsx`);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'客流统计');
+  XLSX.writeFile(wb,`客流统计_${new Date().getMonth()+1}月${new Date().getDate()}日.xlsx`);
 }
+
+// ==================== 启动 ====================
+startCam();
+loadModel();
 </script>
 </body>
 </html>
