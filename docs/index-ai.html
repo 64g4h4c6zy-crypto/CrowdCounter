@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a14">
+<title>客流统计 · AI</title>
+<style>
+:root {
+  --cyan: #00E5FF; --gold: #FFD740; --red: #FF3D5C; --green: #00E676;
+  --bg: #080C14; --panel-bg: rgba(12,16,28,0.92);
+  --glass: rgba(255,255,255,0.04); --glass-border: rgba(255,255,255,0.08);
+  --text-dim: rgba(255,255,255,0.35);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:-apple-system,'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+
+#cam{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:1;filter:brightness(1.05) contrast(1.05);transition:filter .3s}
+
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;pointer-events:none}
+
+#countLine{
+  position:absolute;top:55%;left:3%;right:3%;height:2px;z-index:6;pointer-events:none;
+  background:linear-gradient(90deg,transparent,var(--cyan) 20%,var(--cyan) 80%,transparent);
+  box-shadow:0 0 16px rgba(0,229,255,.4);transition:box-shadow .3s;
+}
+#countLine.active{box-shadow:0 0 28px var(--cyan)}
+
+#topBar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:max(12px,env(safe-area-inset-top,16px)) 16px 0}
+#badge{background:linear-gradient(135deg,#7928CA,#FF0080);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;letter-spacing:1px}
+#recDot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);opacity:0;transition:opacity .3s}
+#recDot.active{opacity:1;animation:pulse 1.5s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#clockText{color:var(--text-dim);font-size:13px;font-variant-numeric:tabular-nums}
+
+#timerBox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:15;text-align:center;pointer-events:none}
+#timer{font-size:56px;font-weight:200;color:var(--cyan);letter-spacing:4px;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(0,229,255,.3);transition:color .4s}
+#timer.warn{color:var(--gold);text-shadow:0 0 20px rgba(255,215,64,.4)}
+#timer.urgent{color:var(--red);text-shadow:0 0 20px rgba(255,61,92,.4);animation:shake .5s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+#timerLabel{font-size:11px;color:var(--text-dim);margin-top:2px;letter-spacing:2px}
+
+#panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:linear-gradient(180deg,transparent,var(--panel-bg) 30%);padding:12px 16px max(16px,env(safe-area-inset-bottom,16px));backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+#stats{display:flex;justify-content:space-around;margin-bottom:14px;padding:0 4px}
+.statCard{text-align:center;padding:8px 12px;background:var(--glass);border-radius:14px;border:1px solid var(--glass-border);min-width:72px;transition:all .2s}
+.statCard.flash{background:rgba(0,229,255,.12);border-color:rgba(0,229,255,.3)}
+.statCard .num{font-size:30px;font-weight:300;color:var(--cyan);font-variant-numeric:tabular-nums;line-height:1.1;transition:transform .15s}
+.statCard .num.pop{transform:scale(1.2);color:#fff}
+.statCard .lbl{font-size:10px;color:var(--text-dim);margin-top:3px;letter-spacing:1px}
+.statCard.gold .num{color:var(--gold)}
+.statCard.green .num{color:var(--green)}
+#btns{display:flex;gap:10px;justify-content:center;align-items:center}
+.btn{padding:10px 20px;border-radius:24px;border:none;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.5px;transition:all .15s;display:flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.94);opacity:.8}
+.btnStart{background:linear-gradient(135deg,#7928CA,#FF0080);color:#fff;box-shadow:0 4px 20px rgba(121,40,202,.4);padding:10px 28px}
+.btnStart.running{background:linear-gradient(135deg,var(--cyan),#00B8D4);box-shadow:0 4px 16px rgba(0,229,255,.3)}
+.btnTimer{background:rgba(255,215,64,.1);color:var(--gold);border:1px solid rgba(255,215,64,.25)}
+.btnExport{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.25)}
+.btnReset{background:rgba(255,255,255,.06);color:var(--text-dim);border:1px solid var(--glass-border);padding:10px 14px}
+#statusBar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}
+#statusDot{width:5px;height:5px;border-radius:50%;background:var(--text-dim)}
+#statusDot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
+#statusDot.loading{background:var(--gold);box-shadow:0 0 6px var(--gold);animation:pulse 1s infinite}
+#statusText{font-size:10px;color:var(--text-dim);letter-spacing:.5px}
+#modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:50;justify-content:center;align-items:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#modal.show{display:flex}
+#modalInner{background:linear-gradient(145deg,rgba(20,24,42,.98),rgba(12,16,32,.98));border:1px solid rgba(0,229,255,.15);border-radius:20px;padding:24px;width:280px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#modalInner h3{color:var(--cyan);font-size:15px;font-weight:500;margin-bottom:16px}
+#modalInner .field{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px}
+#modalInner input{width:64px;padding:8px 4px;background:rgba(255,255,255,.06);border:1px solid rgba(0,229,255,.2);border-radius:10px;color:var(--cyan);font-size:22px;text-align:center;outline:none}
+#modalInner input:focus{border-color:var(--cyan)}
+#modalInner .unit{color:var(--text-dim);font-size:14px}
+.modalBtn{padding:8px 18px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer}
+.modalBtn.confirm{background:var(--gold);color:#000}
+.modalBtn.cancel{background:rgba(255,255,255,.08);color:var(--text-dim)}
+#toast{position:fixed;top:60px;left:50%;transform:translateX(-50%) translateY(-20px);z-index:60;padding:8px 20px;border-radius:20px;background:rgba(0,0,0,.85);color:#fff;font-size:13px;opacity:0;transition:all .3s;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* 模型加载覆盖层 */
+#loadingOverlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;background:rgba(0,0,0,.9);display:flex;flex-direction:column;justify-content:center;align-items:center}
+#loadingSpinner{width:40px;height:40px;border:3px solid var(--glass-border);border-top-color:var(--cyan);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadingText{color:var(--cyan);font-size:14px;margin-top:16px;letter-spacing:1px}
+#loadingSub{color:var(--text-dim);font-size:11px;margin-top:6px}
+#fpsDisplay{position:absolute;top:8px;right:10px;z-index:18;font-size:10px;color:rgba(0,255,0,.6);font-variant-numeric:tabular-nums;pointer-events:none}
+</style>
+</head>
+<body>
+
+<video id="cam" autoplay playsinline muted></video>
+<canvas id="overlay"></canvas>
+<div id="countLine"></div>
+
+<div id="topBar">
+  <div style="display:flex;align-items:center;gap:8px">
+    <div id="recDot"></div>
+    <span id="badge">AI</span>
+  </div>
+  <div id="topRight"><span id="clockText"></span></div>
+</div>
+
+<div id="fpsDisplay"></div>
+
+<div id="timerBox">
+  <div id="timer">--:--</div>
+  <div id="timerLabel">倒计时</div>
+</div>
+
+<div id="loadingOverlay">
+  <div id="loadingSpinner"></div>
+  <div id="loadingText">正在加载 AI 模型...</div>
+  <div id="loadingSub">COCO-SSD · 人体检测</div>
+</div>
+
+<div id="panel">
+  <div id="stats">
+    <div class="statCard green" id="cardIn"><div class="num" id="nIn">0</div><div class="lbl">进入</div></div>
+    <div class="statCard" id="cardOut"><div class="num" id="nOut">0</div><div class="lbl">离开</div></div>
+    <div class="statCard gold" id="cardNet"><div class="num" id="nNet">0</div><div class="lbl">净流量</div></div>
+  </div>
+  <div id="btns">
+    <button class="btn btnStart" id="btnGo" disabled>⏳ 模型加载中</button>
+    <button class="btn btnTimer" onclick="showTimerModal()">⏱ 定时</button>
+    <button class="btn btnExport" onclick="exportExcel()">📊 导出</button>
+    <button class="btn btnReset" onclick="resetAll()">↺</button>
+  </div>
+  <div id="statusBar">
+    <div id="statusDot" class="loading"></div>
+    <span id="statusText">正在加载 COCO-SSD 模型...</span>
+  </div>
+</div>
+
+<div id="modal">
+  <div id="modalInner">
+    <h3>⏱ 设置倒计时</h3>
+    <div class="field"><input id="minInp" type="number" value="60" min="1" max="1440" inputmode="numeric"><span class="unit">分钟</span></div>
+    <button class="modalBtn confirm" onclick="startTimer()">开始计时</button>
+    <button class="modalBtn cancel" onclick="document.getElementById('modal').classList.remove('show')">取消</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+<script>
+// ============================================================
+//  CSV 导出
+// ============================================================
+function exportCSV(rows, filename) {
+  var csv = rows.map(function(r) {
+    return r.map(function(c) { return '"'+String(c).replace(/"/g,'""')+'"'; }).join(',');
+  }).join('\n');
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+var toastTimer;
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 1800);
+}
+
+// ============================================================
+//  全局状态
+// ============================================================
+var countIn = 0, countOut = 0;
+var counting = false, modelLoaded = false;
+var hourly = {}, currentHour = new Date().getHours();
+var timerSeconds = 0, timerRemaining = 0, timerInterval = null;
+
+var video = document.getElementById('cam');
+var overlay = document.getElementById('overlay');
+var octx = overlay.getContext('2d');
+
+// AI 模型
+var model = null;
+
+// 追踪
+var trails = {};           // id → {cx,cy,vx,vy,prevCx,prevCy,counted,life,persistCount}
+var nextTrailId = 0;
+var lastCountedFrame = {};
+var spatialCooldowns = {};
+var nextSpatialId = 0;
+
+// 参数
+var COUNT_LINE = 0.55;
+var IOU_THRESHOLD = 0.3;    // IOU 匹配阈值
+var PERSIST_FRAMES = 3;     // 持续性验证
+var COOLDOWN_FRAMES = 30;   // 计数冷却（帧数）
+var SPATIAL_COOLDOWN = 90;  // 空间冷却（像素）
+var DETECT_INTERVAL = 200;  // 检测间隔（ms）
+var MIN_CONFIDENCE = 0.45;  // 最低置信度
+
+var frameNum = 0;
+var lastDetectTime = 0;
+var fpsFrames = 0, fpsTime = Date.now(), currentFPS = 0;
+
+// ============================================================
+//  加载 AI 模型
+// ============================================================
+async function loadModel() {
+  try {
+    setStatus('正在加载 COCO-SSD 模型...', 'loading');
+    showToast('\u23f3 \u6b63\u5728\u4e0b\u8f7d AI \u6a21\u578b (~2.5MB)...');
+
+    // 等待 TensorFlow.js 就绪
+    await tf.ready();
+
+    // 加载 COCO-SSD lite 模型
+    model = await cocoSsd.load({
+      base: 'lite_mobilenet_v2'
+    });
+
+    modelLoaded = true;
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('btnGo').disabled = false;
+    document.getElementById('btnGo').textContent = '\u25b6 \u5f00\u59cb\u8ba1\u6570';
+
+    // 预热：跑一次空推理
+    var warmupCanvas = document.createElement('canvas');
+    warmupCanvas.width = 300; warmupCanvas.height = 300;
+    await model.detect(warmupCanvas);
+
+    setStatus('AI 模型就绪 \u00b7 \u70b9\u51fb\u300c\u5f00\u59cb\u8ba1\u6570\u300d\u542f\u52a8', false);
+    showToast('\u2705 AI \u6a21\u578b\u52a0\u8f7d\u5b8c\u6210');
+  } catch (e) {
+    console.error('Model load error:', e);
+    setStatus('\u6a21\u578b\u52a0\u8f7d\u5931\u8d25\uff1a' + (e.message || 'CDN \u8bbf\u95ee\u5931\u8d25\uff0c\u8bf7\u68af\u5b50\u540e\u5237\u65b0'), false);
+    showToast('\u274c \u6a21\u578b\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u68c2\u67e5\u68af\u5b50');
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('btnGo').textContent = '\u26a0 \u52a0\u8f7d\u5931\u8d25';
+  }
+}
+
+// ============================================================
+//  摄像头
+// ============================================================
+async function startCam() {
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, min: 15 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+  } catch (e) {
+    try {
+      var stream2 = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }, audio: false
+      });
+      video.srcObject = stream2;
+      await video.play();
+    } catch (e2) {
+      setStatus('\u6444\u50cf\u5934\u6743\u9650\u88ab\u62d2', false);
+    }
+  }
+}
+
+// ============================================================
+//  IOU 计算（交并比）
+// ============================================================
+function iou(a, b) {
+  var ax1 = a.cx - a.w/2, ay1 = a.cy - a.h/2, ax2 = a.cx + a.w/2, ay2 = a.cy + a.h/2;
+  var bx1 = b.cx - b.w/2, by1 = b.cy - b.h/2, bx2 = b.cx + b.w/2, by2 = b.cy + b.h/2;
+  var ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
+  var ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
+  var iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1);
+  var intersection = iw * ih;
+  var union = a.w * a.h + b.w * b.h - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+// ============================================================
+//  AI 检测 + 追踪（主循环）
+// ============================================================
+async function detectAI() {
+  if (!counting || !modelLoaded) return;
+
+  var now = Date.now();
+  if (now - lastDetectTime < DETECT_INTERVAL) {
+    requestAnimationFrame(function() { detectAI(); });
+    return;
+  }
+  lastDetectTime = now;
+
+  var vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) { requestAnimationFrame(function() { detectAI(); }); return; }
+
+  try {
+    // ── AI 检测 ──
+    var predictions = await model.detect(video);
+    frameNum++;
+
+    // FPS 统计
+    fpsFrames++;
+    if (now - fpsTime > 1000) {
+      currentFPS = Math.round(fpsFrames * 1000 / (now - fpsTime));
+      fpsFrames = 0; fpsTime = now;
+      document.getElementById('fpsDisplay').textContent = currentFPS + ' FPS';
+    }
+
+    // 过滤：只保留 "person" 类且置信度达标
+    var persons = [];
+    for (var i = 0; i < predictions.length; i++) {
+      var p = predictions[i];
+      if (p.class === 'person' && p.score >= MIN_CONFIDENCE) {
+        persons.push({
+          cx: p.bbox[0] + p.bbox[2] / 2,
+          cy: p.bbox[1] + p.bbox[3] / 2,
+          w: p.bbox[2],
+          h: p.bbox[3],
+          score: p.score
+        });
+      }
+    }
+
+    // ── 追踪匹配 ──
+    overlay.width = vw; overlay.height = vh;
+
+    var matched = {};
+    var usedTrails = {};
+
+    for (var pi = 0; pi < persons.length; pi++) {
+      var person = persons[pi];
+      var trailId = null;
+      var bestIou = IOU_THRESHOLD;
+
+      var trailKeys = Object.keys(trails);
+      for (var k = 0; k < trailKeys.length; k++) {
+        var tid = parseInt(trailKeys[k]);
+        if (usedTrails[tid]) continue;
+        var t = trails[tid];
+
+        // 速度预测位置
+        var predCx = t.cx + (t.vx || 0);
+        var predCy = t.cy + (t.vy || 0);
+
+        var iouScore = iou(
+          { cx: person.cx, cy: person.cy, w: person.w, h: person.h },
+          { cx: predCx, cy: predCy, w: t.w, h: t.h }
+        );
+
+        if (iouScore > bestIou) {
+          bestIou = iouScore;
+          trailId = tid;
+        }
+      }
+
+      if (trailId === null) {
+        // 新人
+        trailId = nextTrailId++;
+        trails[trailId] = {
+          cx: person.cx, cy: person.cy, prevCx: person.cx, prevCy: person.cy,
+          vx: 0, vy: 0,
+          w: person.w, h: person.h,
+          counted: false, life: 10,
+          persistCount: 1,
+          score: person.score
+        };
+      } else {
+        var t = trails[trailId];
+        t.vx = person.cx - t.cx;
+        t.vy = person.cy - t.cy;
+        t.prevCx = t.cx;
+        t.prevCy = t.cy;
+        t.cx = person.cx; t.cy = person.cy;
+        t.w = person.w; t.h = person.h;
+        t.life = 10;
+        t.score = person.score;
+        t.persistCount = Math.min((t.persistCount || 0) + 1, PERSIST_FRAMES + 1);
+
+        // ── 计数判定 ──
+        var isPersistent = t.persistCount >= PERSIST_FRAMES;
+        var cooldownPassed = !lastCountedFrame[trailId] ||
+                             (frameNum - lastCountedFrame[trailId]) > COOLDOWN_FRAMES;
+
+        if (!t.counted && isPersistent && cooldownPassed) {
+          var prevY = t.prevCy / vh, curY = t.cy / vh;
+
+          // 空间冷却检查
+          var tooClose = false;
+          var scKeys = Object.keys(spatialCooldowns);
+          for (var sc = 0; sc < scKeys.length; sc++) {
+            var scData = spatialCooldowns[scKeys[sc]];
+            if (Date.now() - scData.time < 3000) {
+              var sdx = t.cx - scData.x, sdy = t.cy - scData.y;
+              if (Math.sqrt(sdx*sdx + sdy*sdy) < SPATIAL_COOLDOWN) {
+                tooClose = true; break;
+              }
+            } else {
+              delete spatialCooldowns[scKeys[sc]];
+            }
+          }
+
+          if (!tooClose) {
+            if (prevY < COUNT_LINE && curY >= COUNT_LINE) {
+              countIn++;
+              t.counted = true;
+              lastCountedFrame[trailId] = frameNum;
+              spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
+              updateUI(); saveHourly(); flashCard('cardIn');
+              setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut + ' | ' + currentFPS + ' FPS', true);
+            } else if (prevY > COUNT_LINE && curY <= COUNT_LINE) {
+              countOut++;
+              t.counted = true;
+              lastCountedFrame[trailId] = frameNum;
+              spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
+              updateUI(); saveHourly(); flashCard('cardOut');
+              setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut + ' | ' + currentFPS + ' FPS', true);
+            }
+          }
+        }
+      }
+
+      matched[trailId] = true;
+      usedTrails[trailId] = true;
+
+      // 画框
+      var tt = trails[trailId];
+      var isPersistent = (tt.persistCount || 0) >= PERSIST_FRAMES;
+      var confidence = tt.score || 0;
+
+      if (tt.counted) {
+        octx.strokeStyle = 'rgba(0,230,118,.8)';
+        octx.lineWidth = 3;
+      } else if (isPersistent) {
+        octx.strokeStyle = 'rgba(0,229,255,.8)';
+        octx.lineWidth = 2.5;
+      } else {
+        octx.strokeStyle = 'rgba(255,215,64,.5)';
+        octx.lineWidth = 1.5;
+      }
+      octx.strokeRect(person.cx - person.w/2, person.cy - person.h/2, person.w, person.h);
+
+      // 标签
+      var label = (tt.counted ? '\u2713 ' : '') + Math.round(confidence * 100) + '%';
+      octx.fillStyle = tt.counted ? 'rgba(0,230,118,.9)' : isPersistent ? 'rgba(0,229,255,.9)' : 'rgba(255,215,64,.7)';
+      octx.font = 'bold 11px sans-serif';
+      var labelY = person.cy - person.h/2 - 6;
+      octx.fillText(label, person.cx - person.w/2, labelY > 12 ? labelY : 14);
+    }
+
+    // 清理过期追踪
+    var allKeys = Object.keys(trails);
+    for (var kk = 0; kk < allKeys.length; kk++) {
+      var tid = parseInt(allKeys[kk]);
+      if (!matched[tid]) {
+        trails[tid].life--;
+        if (trails[tid].life <= 0) {
+          delete trails[tid];
+          delete lastCountedFrame[tid];
+        }
+      }
+    }
+
+    // 画计数线
+    var lineY = vh * COUNT_LINE;
+    octx.strokeStyle = 'rgba(0,229,255,.4)';
+    octx.lineWidth = 2;
+    octx.setLineDash([10, 8]);
+    octx.beginPath(); octx.moveTo(0, lineY); octx.lineTo(vw, lineY); octx.stroke();
+    octx.setLineDash([]);
+    octx.fillStyle = 'rgba(0,229,255,.5)';
+    octx.font = '13px sans-serif';
+    octx.fillText('\u25b2 \u8fdb\u5165', 10, lineY - 8);
+    octx.fillText('\u25bc \u79bb\u5f00', 10, lineY + 20);
+
+  } catch (e) {
+    console.error('Detection error:', e);
+  }
+
+  if (counting) {
+    requestAnimationFrame(function() { detectAI(); });
+  }
+}
+
+// ============================================================
+//  UI
+// ============================================================
+function updateUI() {
+  document.getElementById('nIn').textContent = countIn;
+  document.getElementById('nOut').textContent = countOut;
+  document.getElementById('nNet').textContent = countIn - countOut;
+}
+function flashCard(id) {
+  var card = document.getElementById(id);
+  var num = card.querySelector('.num');
+  num.classList.add('pop'); card.classList.add('flash');
+  setTimeout(function() { num.classList.remove('pop'); card.classList.remove('flash'); }, 200);
+}
+function setStatus(msg, state) {
+  document.getElementById('statusText').textContent = msg;
+  var dot = document.getElementById('statusDot');
+  dot.className = state === true ? 'on' : state === 'loading' ? 'loading' : '';
+}
+
+function toggle() {
+  if (!modelLoaded) { showToast('\u23f3 \u6a21\u578b\u8fd8\u5728\u52a0\u8f7d\u4e2d...'); return; }
+  counting = !counting;
+  var btn = document.getElementById('btnGo');
+  var rec = document.getElementById('recDot');
+  var line = document.getElementById('countLine');
+
+  if (counting) {
+    btn.textContent = '\u23f8 \u6682\u505c';
+    btn.classList.add('running');
+    rec.classList.add('active');
+    line.classList.add('active');
+    setStatus('AI \u68c0\u6d4b\u4e2d... ' + currentFPS + ' FPS', true);
+    showToast('\u{1f534} AI \u8ba1\u6570\u5df2\u5f00\u59cb');
+    requestAnimationFrame(function() { detectAI(); });
+  } else {
+    btn.textContent = '\u25b6 \u5f00\u59cb\u8ba1\u6570';
+    btn.classList.remove('running');
+    rec.classList.remove('active');
+    line.classList.remove('active');
+    setStatus('\u5df2\u6682\u505c', false);
+    saveHourly();
+  }
+}
+
+function resetAll() {
+  countIn = 0; countOut = 0;
+  hourly = {};
+  trails = {}; nextTrailId = 0; frameNum = 0;
+  lastCountedFrame = {};
+  spatialCooldowns = {}; nextSpatialId = 0;
+  updateUI();
+  setStatus('\u5df2\u91cd\u7f6e', false);
+  showToast('\u21ba \u6570\u636e\u5df2\u6e05\u96f6');
+}
+
+function saveHourly() {
+  var h = new Date().getHours();
+  if (h !== currentHour) { currentHour = h; }
+  var key = h + ':00-' + (h+1) + ':00';
+  if (!hourly[key]) hourly[key] = { inCount: 0, outCount: 0 };
+  hourly[key].inCount = Math.max(hourly[key].inCount, countIn);
+  hourly[key].outCount = Math.max(hourly[key].outCount, countOut);
+}
+
+// ============================================================
+//  倒计时
+// ============================================================
+function showTimerModal() {
+  document.getElementById('modal').classList.add('show');
+  document.getElementById('minInp').focus();
+}
+function startTimer() {
+  var min = parseInt(document.getElementById('minInp').value) || 60;
+  timerSeconds = min * 60; timerRemaining = timerSeconds;
+  document.getElementById('modal').classList.remove('show');
+  updateTimerDisplay();
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(function() {
+    timerRemaining--;
+    updateTimerDisplay();
+    if (timerRemaining <= 0) {
+      clearInterval(timerInterval); timerInterval = null;
+      if (counting) toggle();
+      showToast('\u23f0 \u8ba1\u65f6\u7ed3\u675f\uff01');
+      document.getElementById('timer').textContent = '--:--';
+      document.getElementById('timer').className = '';
+    }
+  }, 1000);
+}
+function updateTimerDisplay() {
+  var el = document.getElementById('timer');
+  if (timerRemaining > 0) {
+    var m = Math.floor(timerRemaining / 60), s = timerRemaining % 60;
+    el.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    el.className = timerRemaining < 60 ? 'urgent' : timerRemaining < 300 ? 'warn' : '';
+  } else { el.textContent = '--:--'; el.className = ''; }
+}
+
+// ============================================================
+//  导出
+// ============================================================
+function exportExcel() {
+  saveHourly();
+  var hours = Object.keys(hourly).sort();
+  if (hours.length === 0) { showToast('\u6682\u65e0\u6570\u636e\u53ef\u5bfc\u51fa'); return; }
+  var rows = [['\u65f6\u6bb5', '\u8fdb\u5165', '\u79bb\u5f00', '\u51c0\u6d41\u91cf']];
+  hours.forEach(function(h) {
+    var d = hourly[h];
+    rows.push([h, d.inCount||0, d.outCount||0, (d.inCount||0) - (d.outCount||0)]);
+  });
+  var ti = hours.reduce(function(s,h){return s+(hourly[h].inCount||0);}, 0);
+  var to = hours.reduce(function(s,h){return s+(hourly[h].outCount||0);}, 0);
+  rows.push(['\u5408\u8ba1', ti, to, ti - to]);
+  exportCSV(rows, '\u5ba2\u6d41\u7edf\u8ba1_'+new Date().toLocaleDateString('zh-CN')+'.csv');
+  showToast('\u{1f4ca} CSV \u5df2\u5bfc\u51fa');
+}
+
+// ============================================================
+//  时钟
+// ============================================================
+function updateClock() {
+  document.getElementById('clockText').textContent =
+    new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+setInterval(updateClock, 10000); updateClock();
+
+// ============================================================
+//  启动
+// ============================================================
+startCam();
+loadModel();
+</script>
+</body>
+</html>
