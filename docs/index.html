@@ -5,201 +5,178 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0a0a14">
+<meta name="theme-color" content="#080C14">
+<link rel="manifest" href="manifest.json">
 <title>客流统计</title>
 <style>
 :root {
-  --cyan: #00E5FF;
-  --gold: #FFD740;
-  --red: #FF3D5C;
-  --green: #00E676;
-  --bg: #080C14;
-  --panel-bg: rgba(12,16,28,0.92);
-  --glass: rgba(255,255,255,0.04);
-  --glass-border: rgba(255,255,255,0.08);
-  --text-dim: rgba(255,255,255,0.35);
+  --cyan: #00E5FF; --gold: #FFD740; --red: #FF3D5C; --green: #00E676;
+  --bg: #060911; --card: rgba(255,255,255,0.03);
+  --border: rgba(255,255,255,0.06); --text-dim: rgba(255,255,255,0.30);
+  --glow-cyan: 0 0 20px rgba(0,229,255,0.15);
 }
 
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{
-  width:100%;height:100%;overflow:hidden;
-  background:var(--bg);
+  width:100%;height:100%;overflow:hidden;background:var(--bg);
   font-family:-apple-system,'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif;
-  -webkit-tap-highlight-color:transparent;
-  user-select:none;-webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+  background:radial-gradient(ellipse at 20% 50%,rgba(0,229,255,0.04) 0%,transparent 60%),
+             radial-gradient(ellipse at 80% 50%,rgba(121,40,202,0.04) 0%,transparent 60%),
+             var(--bg);
 }
 
-/* ===== 全屏摄像头 ===== */
 #cam{
   position:absolute;top:0;left:0;width:100%;height:100%;
-  object-fit:cover;
-  opacity:1;
-  filter: brightness(1.05) contrast(1.05);
-  transition: filter .3s;
-}
-#cam.paused{filter:brightness(.5) contrast(.8) saturate(0)}
-
-/* 检测标注叠加层 */
-#overlay{
-  position:absolute;top:0;left:0;width:100%;height:100%;
-  z-index:5;pointer-events:none;
+  object-fit:cover;opacity:1;
+  filter:brightness(1.03) contrast(1.03);
+  transition:filter .4s;
 }
 
-/* ===== 顶部状态栏 ===== */
+#overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;pointer-events:none}
+
+#countLine{
+  position:absolute;top:4%;bottom:4%;left:55%;width:1.5px;z-index:6;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(0,229,255,.5) 15%,rgba(0,229,255,.5) 85%,transparent);
+  box-shadow:0 0 12px rgba(0,229,255,.25);
+  transition:all .5s;
+}
+#countLine.active{
+  box-shadow:0 0 24px rgba(0,229,255,.5),0 0 48px rgba(0,229,255,.15);
+  width:2px;
+}
+
 #topBar{
   position:absolute;top:0;left:0;right:0;z-index:20;
   display:flex;align-items:center;justify-content:space-between;
-  padding:max(12px,env(safe-area-inset-top,16px)) 16px 0;
+  padding:max(14px,env(safe-area-inset-top,18px)) 16px 8px;
+  background:linear-gradient(180deg,rgba(6,9,17,.7),transparent);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
 #recDot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--red);
-  box-shadow:0 0 8px var(--red);
+  width:6px;height:6px;border-radius:50%;
+  background:var(--red);box-shadow:0 0 6px var(--red);
   opacity:0;transition:opacity .3s;
 }
-#recDot.active{opacity:1;animation:pulse 1.5s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+#recDot.active{opacity:1;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 6px var(--red)}50%{opacity:.3;box-shadow:0 0 12px var(--red)}}
+#clockText{color:var(--text-dim);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:.5px}
 
-#topRight{display:flex;align-items:center;gap:12px}
-#clockText{color:var(--text-dim);font-size:13px;font-variant-numeric:tabular-nums;letter-spacing:.5px}
-
-/* ===== 倒计时 ===== */
 #timerBox{
   position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
   z-index:15;text-align:center;pointer-events:none;
 }
+#timerBox.active{pointer-events:auto}
+#timerCancel{display:none;margin-top:10px;padding:6px 18px;border-radius:20px;border:1px solid rgba(255,61,92,.3);background:rgba(255,61,92,.1);color:var(--red);font-size:12px;cursor:pointer;letter-spacing:.5px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#timerCancel.show{display:inline-block}
+#timerCancel:active{background:rgba(255,61,92,.25)}
 #timer{
-  font-size:56px;font-weight:200;color:var(--cyan);
-  letter-spacing:4px;font-variant-numeric:tabular-nums;
-  text-shadow:0 0 20px rgba(0,229,255,.3);
+  font-size:52px;font-weight:200;color:var(--cyan);
+  letter-spacing:5px;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 30px rgba(0,229,255,.25);
   transition:color .4s;
 }
-#timer.warn{color:var(--gold);text-shadow:0 0 20px rgba(255,215,64,.4)}
-#timer.urgent{color:var(--red);text-shadow:0 0 20px rgba(255,61,92,.4);animation:shake .5s ease-in-out}
-@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
-#timerLabel{font-size:11px;color:var(--text-dim);margin-top:2px;letter-spacing:2px;text-transform:uppercase}
+#timer.warn{color:var(--gold);text-shadow:0 0 30px rgba(255,215,64,.3)}
+#timer.urgent{color:var(--red);text-shadow:0 0 30px rgba(255,61,92,.3);animation:shake .5s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+#timerLabel{font-size:10px;color:var(--text-dim);margin-top:3px;letter-spacing:3px;text-transform:uppercase;opacity:0.5}
 
-/* ===== 计数线 ===== */
-#countLine{
-  position:absolute;top:3%;bottom:3%;left:55%;width:2px;
-  z-index:6;pointer-events:none;
-  background:linear-gradient(180deg,transparent,var(--cyan) 20%,var(--cyan) 80%,transparent);
-  box-shadow:0 0 16px rgba(0,229,255,.4);
-  transition:box-shadow .3s;
-}
-#countLine.active{box-shadow:0 0 24px rgba(0,229,255,.6),0 0 8px var(--cyan)}
-
-/* ===== 底部面板 ===== */
 #panel{
   position:absolute;bottom:0;left:0;right:0;z-index:20;
-  background:linear-gradient(180deg,transparent,var(--panel-bg) 30%);
-  padding:12px 16px max(16px,env(safe-area-inset-bottom,16px));
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  background:linear-gradient(180deg,transparent 0%,rgba(6,9,17,.85) 30%,rgba(6,9,17,.95) 100%);
+  padding:20px 16px max(20px,env(safe-area-inset-bottom,20px));
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
 }
 
-/* 统计数字 */
-#stats{
-  display:flex;justify-content:space-around;
-  margin-bottom:14px;padding:0 4px;
-}
+#stats{display:flex;justify-content:center;margin-bottom:18px}
 .statCard{
-  text-align:center;padding:8px 12px;
-  background:var(--glass);border-radius:14px;
-  border:1px solid var(--glass-border);
-  min-width:72px;
-  transition:all .2s;
+  text-align:center;padding:14px 32px;
+  background:var(--card);border-radius:20px;
+  border:1px solid var(--border);min-width:100px;
+  transition:all .25s;position:relative;
 }
-.statCard.flash{background:rgba(0,229,255,.12);border-color:rgba(0,229,255,.3)}
+.statCard::after{
+  content:'';position:absolute;inset:-1px;border-radius:20px;
+  background:linear-gradient(135deg,rgba(0,229,255,.08),transparent 50%,rgba(121,40,202,.05));
+  z-index:-1;
+}
+.statCard.flash{background:rgba(0,229,255,.10);border-color:rgba(0,229,255,.25);box-shadow:var(--glow-cyan)}
 .statCard .num{
-  font-size:30px;font-weight:300;color:var(--cyan);
-  font-variant-numeric:tabular-nums;line-height:1.1;
-  transition:transform .15s;
+  font-size:38px;font-weight:300;color:#fff;
+  font-variant-numeric:tabular-nums;line-height:1;
+  transition:transform .15s,color .15s;
 }
-.statCard .num.pop{transform:scale(1.2);color:#fff}
+.statCard .num.pop{transform:scale(1.3);color:var(--cyan)}
 .statCard .lbl{
-  font-size:10px;color:var(--text-dim);margin-top:3px;
-  letter-spacing:1px;text-transform:uppercase;
+  font-size:10px;color:var(--text-dim);margin-top:5px;
+  letter-spacing:2px;text-transform:uppercase;font-weight:500;
 }
-.statCard.gold .num{color:var(--gold)}
-.statCard.green .num{color:var(--green)}
 
-/* 按钮 */
-#btns{
-  display:flex;gap:10px;justify-content:center;align-items:center;
-}
+#btns{display:flex;gap:10px;justify-content:center;align-items:center}
 .btn{
-  padding:10px 20px;border-radius:24px;border:none;
+  padding:10px 18px;border-radius:22px;border:none;
   font-size:13px;font-weight:600;cursor:pointer;
-  letter-spacing:.5px;
-  transition:all .15s;
-  display:flex;align-items:center;gap:6px;
-  -webkit-tap-highlight-color:transparent;
+  letter-spacing:.3px;transition:all .15s;
+  display:flex;align-items:center;gap:5px;
+  -webkit-tap-highlight-color:transparent;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
 }
-.btn:active{transform:scale(.94);opacity:.8}
-
+.btn:active{transform:scale(.95)}
 .btnStart{
-  background:linear-gradient(135deg,#FF3D5C,#FF1744);
-  color:#fff;box-shadow:0 4px 16px rgba(255,61,92,.3);
-  padding:10px 28px;
+  background:linear-gradient(135deg,#FF3D5C,#D50047);
+  color:#fff;box-shadow:0 2px 12px rgba(255,61,92,.25);
+  padding:10px 24px;font-size:14px;
 }
 .btnStart.running{
-  background:linear-gradient(135deg,var(--cyan),#00B8D4);
-  box-shadow:0 4px 16px rgba(0,229,255,.3);
+  background:linear-gradient(135deg,#00C4D4,#008BA3);
+  box-shadow:0 2px 12px rgba(0,229,255,.25);
 }
+.btnTimer{background:rgba(255,215,64,.08);color:var(--gold);border:1px solid rgba(255,215,64,.15)}
+.btnExport{background:rgba(0,230,118,.08);color:var(--green);border:1px solid rgba(0,230,118,.15)}
+.btnReset{background:rgba(255,255,255,.04);color:var(--text-dim);border:1px solid var(--border);padding:10px 12px}
 
-.btnTimer{background:rgba(255,215,64,.1);color:var(--gold);border:1px solid rgba(255,215,64,.25)}
-.btnExport{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.25)}
-.btnReset{background:rgba(255,255,255,.06);color:var(--text-dim);border:1px solid var(--glass-border);padding:10px 14px}
-
-/* 底部状态条 */
-#statusBar{
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  margin-top:8px;
-}
-#statusDot{width:5px;height:5px;border-radius:50%;background:var(--text-dim)}
+#statusBar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px}
+#statusDot{width:4px;height:4px;border-radius:50%;background:var(--text-dim);transition:all .3s}
 #statusDot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
-#statusText{font-size:10px;color:var(--text-dim);letter-spacing:.5px}
+#statusText{font-size:10px;color:var(--text-dim);letter-spacing:.5px;font-weight:400}
 
-/* ===== 弹窗 ===== */
 #modal{
-  display:none;position:fixed;top:0;left:0;right:0;bottom:0;
-  background:rgba(0,0,0,.7);z-index:50;
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.75);z-index:50;
   justify-content:center;align-items:center;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
 }
 #modal.show{display:flex}
 #modalInner{
-  background:linear-gradient(145deg,rgba(20,24,42,.98),rgba(12,16,32,.98));
-  border:1px solid rgba(0,229,255,.15);border-radius:20px;
-  padding:24px;width:280px;text-align:center;
-  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  background:linear-gradient(145deg,rgba(16,20,36,.98),rgba(8,12,24,.98));
+  border:1px solid rgba(0,229,255,.10);border-radius:24px;
+  padding:28px;width:280px;text-align:center;
+  box-shadow:0 24px 64px rgba(0,0,0,.5);
 }
-#modalInner h3{color:var(--cyan);font-size:15px;font-weight:500;margin-bottom:16px}
-#modalInner .field{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px}
+#modalInner h3{color:#fff;font-size:16px;font-weight:500;margin-bottom:18px}
+#modalInner .field{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:18px}
 #modalInner input{
-  width:64px;padding:8px 4px;
-  background:rgba(255,255,255,.06);border:1px solid rgba(0,229,255,.2);
-  border-radius:10px;color:var(--cyan);font-size:22px;text-align:center;
-  font-variant-numeric:tabular-nums;outline:none;
-  transition:border-color .2s;
+  width:68px;padding:10px 4px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(0,229,255,.15);
+  border-radius:12px;color:var(--cyan);font-size:24px;text-align:center;
+  font-weight:300;outline:none;transition:border-color .2s;
 }
 #modalInner input:focus{border-color:var(--cyan)}
-#modalInner .unit{color:var(--text-dim);font-size:14px}
-#modalInner .modalBtns{display:flex;gap:10px;justify-content:center}
+#modalInner .unit{color:var(--text-dim);font-size:13px}
 .modalBtn{
-  padding:8px 18px;border-radius:20px;border:none;
-  font-size:13px;font-weight:600;cursor:pointer;
+  padding:10px 20px;border-radius:20px;border:none;
+  font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;
 }
-.modalBtn.confirm{background:var(--gold);color:#000}
-.modalBtn.cancel{background:rgba(255,255,255,.08);color:var(--text-dim)}
+.modalBtn:active{transform:scale(.95)}
+.modalBtn.confirm{background:linear-gradient(135deg,var(--gold),#E6A800);color:#000}
+.modalBtn.cancel{background:rgba(255,255,255,.06);color:var(--text-dim)}
 
-/* ===== 提示 Toast ===== */
 #toast{
-  position:fixed;top:60px;left:50%;transform:translateX(-50%) translateY(-20px);
+  position:fixed;top:50px;left:50%;transform:translateX(-50%) translateY(-10px);
   z-index:60;padding:8px 20px;border-radius:20px;
-  background:rgba(0,0,0,.85);color:#fff;font-size:13px;
-  opacity:0;transition:all .3s;
-  pointer-events:none;
+  background:rgba(0,0,0,.88);color:#fff;font-size:12px;font-weight:500;
+  opacity:0;transition:all .3s;pointer-events:none;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.08);
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -210,24 +187,20 @@ html,body{
 <canvas id="overlay"></canvas>
 <div id="countLine"></div>
 
-<!-- 顶部状态栏 -->
 <div id="topBar">
   <div id="recDot"></div>
-  <div id="topRight">
-    <span id="clockText"></span>
-  </div>
+  <span id="clockText"></span>
 </div>
 
-<!-- 倒计时 -->
 <div id="timerBox">
   <div id="timer">--:--</div>
   <div id="timerLabel">倒计时</div>
+  <button id="timerCancel" onclick="cancelTimer()">✕ 取消计时</button>
 </div>
 
-<!-- 底部面板 -->
 <div id="panel">
   <div id="stats">
-    <div class="statCard green" id="cardTotal">
+    <div class="statCard" id="cardTotal">
       <div class="num" id="nTotal">0</div>
       <div class="lbl">总人次</div>
     </div>
@@ -244,7 +217,6 @@ html,body{
   </div>
 </div>
 
-<!-- 倒计时弹窗 -->
 <div id="modal">
   <div id="modalInner">
     <h3>⏱ 设置倒计时</h3>
@@ -252,324 +224,157 @@ html,body{
       <input id="minInp" type="number" value="60" min="1" max="1440" inputmode="numeric">
       <span class="unit">分钟</span>
     </div>
-    <div class="modalBtns">
-      <button class="modalBtn confirm" onclick="startTimer()">开始计时</button>
-      <button class="modalBtn cancel" onclick="closeModal()">取消</button>
-    </div>
+    <button class="modalBtn confirm" onclick="startTimer()">开始计时</button>
+    <button class="modalBtn cancel" onclick="document.getElementById('modal').classList.remove('show')">取消</button>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-// ============================================================
-//  纯 CSV 导出
-// ============================================================
-function exportCSV(rows, filename) {
-  var csv = rows.map(function(r) {
-    return r.map(function(c) { return '"'+String(c).replace(/"/g,'""')+'"'; }).join(',');
-  }).join('\n');
-  var BOM = '\uFEFF';
-  var blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a);
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
+// CSV 导出
+function exportCSV(rows,f){
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',')}).join('\n');
+  var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=f;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// ============================================================
-//  Toast 提示
-// ============================================================
 var toastTimer;
-function showToast(msg) {
-  var el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
+function showToast(msg){
+  var el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 1800);
+  toastTimer=setTimeout(function(){el.classList.remove('show')},1800);
 }
 
-// ============================================================
-//  全局状态
-// ============================================================
-var totalCount = 0;
-var counting = false;
-var hourly = {}, currentHour = new Date().getHours();
-var timerSeconds = 0, timerRemaining = 0, timerInterval = null;
+var totalCount=0;
+var counting=false;
+var hourly={},currentHour=new Date().getHours();
+var timerSeconds=0,timerRemaining=0,timerInterval=null;
 
-var video = document.getElementById('cam');
-var overlay = document.getElementById('overlay');
-var octx = overlay.getContext('2d');
+var video=document.getElementById('cam');
+var overlay=document.getElementById('overlay');
+var octx=overlay.getContext('2d');
 
-// ============================================================
-//  帧差法参数（可调优）
-// ============================================================
-var DIFF_THRESHOLD = 35;       // 基础帧差阈值 ↑28→35（降低微动敏感度）
-var MIN_BLOB_SIZE = 250;       // 最小团块像素数 ↑100→250（过滤相机抖动噪点）
-var MIN_BLOB_AREA = 400;       // 最小团块面积 ↑新增（进一步过滤碎片）
-var MAX_ASPECT_RATIO = 0.60;   // 最大宽高比 ↓0.65→0.60（更严格的人形筛选）
-var PERSIST_FRAMES = 5;        // 持续性验证 ↑3→5（更长的确认时间）
-var COOLDOWN_FRAMES = 45;      // 计数冷却 ↑20→45（防止重复计数）
-var SPATIAL_COOLDOWN = 80;     // 空间冷却：像素距离内不再计数 ↑新增
-var REFRESH_REF_EVERY = 25;    // 参考帧刷新间隔 ↓30→25（更快适应场景变化）
-var COUNT_LINE = 0.55;         // 竖直线位置（画面 55% 宽度处）
-var PROCESS_W = 480;           // 检测处理宽度
-var TRACK_MAX_GAP = 100;       // 团块追踪最大间距 ↑70→100（防止团块裂开导致多 ID）
-var SHAKE_BLOB_LIMIT = 10;     // 抖动检测：超过此数量的团块视为抖动 ↑新增
-var SHAKE_SUPPRESS_MS = 800;   // 抖动抑制时间 ↑新增
+var DIFF_THRESHOLD=35,MIN_BLOB_SIZE=250,MIN_BLOB_AREA=400;
+var MAX_ASPECT_RATIO=0.60,PERSIST_FRAMES=5,COOLDOWN_FRAMES=45;
+var SPATIAL_COOLDOWN=80,REFRESH_REF_EVERY=25,COUNT_LINE=0.55,PROCESS_W=480;
+var TRACK_MAX_GAP=100,SHAKE_BLOB_LIMIT=10,SHAKE_SUPPRESS_MS=800;
 
-var refFrame = null;
-var frameNum = 0;
-var blobTrails = {};           // id → {cx,cy,vx,vy,prevCx,prevCy,counted,life,persistCount}
-var nextTrailId = 0;
+var refFrame=null,frameNum=0;
+var blobTrails={},nextTrailId=0;
+var lastCountedFrame={};
+var spatialCooldowns={},nextSpatialId=0;
+var runningBrightness=128,lastShakeTime=0;
+var offscreen=document.createElement('canvas'),offCtx=offscreen.getContext('2d');
 
-// 离屏 canvas 用于检测处理（低分辨率）
-var offscreen = document.createElement('canvas');
-var offCtx = offscreen.getContext('2d');
-
-// 自适应阈值用：滑动平均
-var runningBrightness = 128;   // 0-255 滑动平均亮度
-
-// 抖动抑制
-var lastShakeTime = 0;
-
-// 空间冷却：记录最近计数位置，防止同一人裂成多个团块重复计数
-var spatialCooldowns = {};     // key → {x, y, time}
-var nextSpatialId = 0;
-
-// ============================================================
-//  摄像头 —— 高分辨率 + 安卓兼容
-// ============================================================
-function startCam() {
-  // 先检查浏览器是否支持摄像头
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setStatus('浏览器不支持摄像头 API', false);
-    showToast('请使用 Chrome 或 Safari 打开');
-    return;
+function startCam(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    setStatus('浏览器不支持摄像头',false);showToast('请使用 Chrome 或 Safari');return;
   }
-
-  // 尝试找到后置摄像头 deviceId（部分安卓需要精确指定）
-  findBackCamera().then(function(deviceId) {
+  findBackCamera().then(function(deviceId){
     return tryCameraConstraints(deviceId);
-  }).catch(function() {
-    // enumerateDevices 失败，直接尝试通用约束
-    return tryCameraConstraints(null);
-  });
+  }).catch(function(){return tryCameraConstraints(null)});
 }
-
-// 枚举设备找到后置摄像头
-function findBackCamera() {
-  return navigator.mediaDevices.enumerateDevices().then(function(devices) {
-    var backCam = null;
-    for (var i = 0; i < devices.length; i++) {
-      var d = devices[i];
-      // 后置摄像头通常是 environment 或标记为 back
-      if (d.kind === 'videoinput') {
-        var label = (d.label || '').toLowerCase();
-        if (label.indexOf('back') !== -1 || label.indexOf('rear') !== -1 ||
-            label.indexOf('environment') !== -1 || label.indexOf('后置') !== -1 ||
-            label.indexOf('背面') !== -1) {
-          backCam = d.deviceId;
-          break;
+function findBackCamera(){
+  return navigator.mediaDevices.enumerateDevices().then(function(devices){
+    var bc=null;
+    for(var i=0;i<devices.length;i++){
+      var d=devices[i];
+      if(d.kind==='videoinput'){
+        var l=(d.label||'').toLowerCase();
+        if(l.indexOf('back')!==-1||l.indexOf('rear')!==-1||l.indexOf('environment')!==-1||l.indexOf('后置')!==-1||l.indexOf('背面')!==-1){bc=d.deviceId;break}
+      }
+    }
+    if(!bc){
+      for(var j=devices.length-1;j>=0;j--){
+        var dd=devices[j];
+        if(dd.kind==='videoinput'){
+          var ll=(dd.label||'').toLowerCase();
+          if(ll.indexOf('front')===-1&&ll.indexOf('前置')===-1){bc=dd.deviceId;break}
         }
       }
     }
-    // 如果没找到标记为 back 的，取第一个非 front 的（或最后一个）
-    if (!backCam) {
-      for (var j = devices.length - 1; j >= 0; j--) {
-        var dd = devices[j];
-        if (dd.kind === 'videoinput') {
-          var ll = (dd.label || '').toLowerCase();
-          if (ll.indexOf('front') === -1 && ll.indexOf('前置') === -1) {
-            backCam = dd.deviceId;
-            break;
-          }
-        }
-      }
-    }
-    return backCam;
+    return bc;
   });
 }
-
-// 多级降级尝试
-function tryCameraConstraints(deviceId) {
-  // 根据设备类型决定策略
-  var isAndroid = /android/i.test(navigator.userAgent);
-  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  var isChrome = /chrome/i.test(navigator.userAgent) && !/edge/i.test(navigator.userAgent);
-
-  // 约束方案（按优先级排列）
-  var attempts = [];
-
-  // 方案0：安卓 Chrome 先试 min 约束（安卓 Chrome 处理 ideal 有问题）
-  if (isAndroid && isChrome) {
-    attempts.push({
-      name: '安卓高清(min)',
-      video: buildVideoConstraints(deviceId, { min: 1280 }, { min: 720 }, 30)
-    });
-    attempts.push({
-      name: '安卓标清(min)',
-      video: buildVideoConstraints(deviceId, { min: 640 }, { min: 480 }, 24)
-    });
+function tryCameraConstraints(deviceId){
+  var isAndroid=/android/i.test(navigator.userAgent);
+  var isChrome=/chrome/i.test(navigator.userAgent)&&!/edge/i.test(navigator.userAgent);
+  var attempts=[];
+  if(isAndroid&&isChrome){
+    attempts.push({name:'hd-min',video:buildC(deviceId,{min:1280},{min:720},30)});
+    attempts.push({name:'sd-min',video:buildC(deviceId,{min:640},{min:480},24)});
   }
-
-  // 方案1：ideal 高分辨率（iOS 和桌面端有良好支持）
-  attempts.push({
-    name: '高清(ideal)',
-    video: buildVideoConstraints(deviceId, { ideal: 1920 }, { ideal: 1080 }, 30)
-  });
-
-  // 方案2：固定 1280×720
-  attempts.push({
-    name: '720p',
-    video: buildVideoConstraints(deviceId, 1280, 720, 24)
-  });
-
-  // 方案3：minimum 640×480（防止安卓给 176×144）
-  attempts.push({
-    name: 'VGA(min)',
-    video: buildVideoConstraints(deviceId, { min: 640 }, { min: 480 }, 24)
-  });
-
-  // 方案4：仅指定 facingMode（兜底）
-  attempts.push({
-    name: '默认',
-    video: buildVideoConstraints(deviceId, undefined, undefined, undefined)
-  });
-
-  // 逐个尝试
-  return tryNextConstraint(attempts, 0);
+  attempts.push({name:'hd-ideal',video:buildC(deviceId,{ideal:1920},{ideal:1080},30)});
+  attempts.push({name:'720p',video:buildC(deviceId,1280,720,24)});
+  attempts.push({name:'vga-min',video:buildC(deviceId,{min:640},{min:480},24)});
+  attempts.push({name:'default',video:buildC(deviceId)});
+  return tryNext(attempts,0);
 }
-
-function buildVideoConstraints(deviceId, width, height, fps) {
-  var c = { audio: false };
-  var video = {};
-
-  // 设备 ID
-  if (deviceId) {
-    video.deviceId = { exact: deviceId };
-  } else {
-    video.facingMode = 'environment';
-  }
-
-  // 宽度
-  if (width !== undefined) {
-    if (typeof width === 'object') {
-      video.width = width;
-    } else {
-      video.width = { exact: width };
-    }
-  }
-
-  // 高度
-  if (height !== undefined) {
-    if (typeof height === 'object') {
-      video.height = height;
-    } else {
-      video.height = { exact: height };
-    }
-  }
-
-  // 帧率（安卓默认可能只有 5fps，必须指定）
-  if (fps !== undefined) {
-    video.frameRate = { ideal: fps, min: 10 };
-  }
-
-  c.video = video;
-  return c;
+function buildC(deviceId,w,h,fps){
+  var c={audio:false},v={};
+  if(deviceId)v.deviceId={exact:deviceId};else v.facingMode='environment';
+  if(w!==undefined)v.width=typeof w==='object'?w:{exact:w};
+  if(h!==undefined)v.height=typeof h==='object'?h:{exact:h};
+  if(fps!==undefined)v.frameRate={ideal:fps,min:10};
+  c.video=v;return c;
 }
-
-function tryNextConstraint(attempts, index) {
-  if (index >= attempts.length) {
-    setStatus('无法打开摄像头 · 请检查权限设置', false);
-    showToast('摄像头启动失败，请授予权限后刷新');
-    return Promise.reject('all attempts failed');
+function tryNext(attempts,index){
+  if(index>=attempts.length){
+    setStatus('无法打开摄像头 · 请检查权限',false);
+    showToast('摄像头启动失败');return Promise.reject('all failed');
   }
-
-  var attempt = attempts[index];
-
-  return navigator.mediaDevices.getUserMedia(attempt.video).then(function(stream) {
-    video.srcObject = stream;
-    return video.play().then(function() {
-      // 等待视频元数据加载（安卓需要这段时间）
-      return new Promise(function(resolve) {
-        if (video.videoWidth && video.videoHeight) {
-          resolve();
-        } else {
-          video.addEventListener('loadedmetadata', resolve, { once: true });
-          // 超时保护
-          setTimeout(resolve, 3000);
-        }
+  var a=attempts[index];
+  return navigator.mediaDevices.getUserMedia(a.video).then(function(s){
+    video.srcObject=s;
+    return video.play().then(function(){
+      return new Promise(function(resolve){
+        if(video.videoWidth&&video.videoHeight)resolve();
+        else{video.addEventListener('loadedmetadata',resolve,{once:true});setTimeout(resolve,3000)}
       });
     });
-  }).then(function() {
-    var w = video.videoWidth, h = video.videoHeight;
-    // 安卓 Chrome 有时返回的大小不对，需要等实际渲染
-    if (!w || !h) {
-      // 再等一小会
-      return new Promise(function(resolve) {
-        setTimeout(function() {
-          resolve();
-        }, 500);
-      }).then(function() {
-        var w2 = video.videoWidth, h2 = video.videoHeight;
-        setStatus('就绪 · 摄像头 ' + (w2||'?') + '\u00d7' + (h2||'?') + ' · 点击「开始计数」启动', false);
-      });
-    }
-    // 分辨率太低时给个提示
-    if (w < 640) {
-      setStatus('就绪 · 摄像头 ' + w + '\u00d7' + h + '（清晰度较低）', false);
-    } else {
-      setStatus('就绪 · 摄像头 ' + w + '\u00d7' + h + ' · 点击「开始计数」启动', false);
-    }
-  }).catch(function(err) {
-    // 这个方案失败了，尝试下一个
-    console.log('摄像头方案 ' + attempt.name + ' 失败: ' + (err.message || err));
-    return tryNextConstraint(attempts, index + 1);
+  }).then(function(){
+    var w=video.videoWidth,h=video.videoHeight;
+    if(!w||!h)return new Promise(function(r){setTimeout(function(){var w2=video.videoWidth,h2=video.videoHeight;setStatus('就绪 · 摄像头 '+(w2||'?')+'×'+(h2||'?')+' · 点击「开始计数」启动',false);r()},500)});
+    setStatus('就绪 · 摄像头 '+w+'×'+h+' · 点击「开始计数」启动',false);
+  }).catch(function(e){
+    return tryNext(attempts,index+1);
   });
 }
 
-// ============================================================
-//  BFS 连通域分析（含宽高比信息）
-// ============================================================
-function findBlobs(mask, w, h) {
-  var visited = new Uint8Array(w * h);
-  var blobs = [];
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      var idx = y * w + x;
-      if (mask[idx] && !visited[idx]) {
-        var queue = [[x, y]];
-        visited[idx] = 1;
-        var minX = x, maxX = x, minY = y, maxY = y, area = 0;
-        while (queue.length) {
-          var p = queue.shift();
-          var cx = p[0], cy = p[1];
-          area++;
-          if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
-          if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-          var dirs = [[0,1],[0,-1],[1,0],[-1,0]];
-          for (var d = 0; d < 4; d++) {
-            var nx = cx + dirs[d][0], ny = cy + dirs[d][1];
-            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-              var ni = ny * w + nx;
-              if (mask[ni] && !visited[ni]) { visited[ni] = 1; queue.push([nx, ny]); }
+function findBlobs(mask,w,h){
+  var visited=new Uint8Array(w*h),blobs=[];
+  for(var y=0;y<h;y++){
+    for(var x=0;x<w;x++){
+      var idx=y*w+x;
+      if(mask[idx]&&!visited[idx]){
+        var queue=[[x,y]];visited[idx]=1;
+        var minX=x,maxX=x,minY=y,maxY=y,area=0;
+        while(queue.length){
+          var p=queue.shift(),cx=p[0],cy=p[1];area++;
+          if(cx<minX)minX=cx;if(cx>maxX)maxX=cx;
+          if(cy<minY)minY=cy;if(cy>maxY)maxY=cy;
+          var dirs=[[0,1],[0,-1],[1,0],[-1,0]];
+          for(var d=0;d<4;d++){
+            var nx=cx+dirs[d][0],ny=cy+dirs[d][1];
+            if(nx>=0&&nx<w&&ny>=0&&ny<h){
+              var ni=ny*w+nx;
+              if(mask[ni]&&!visited[ni]){visited[ni]=1;queue.push([nx,ny])}
             }
           }
         }
-        if (area >= MIN_BLOB_SIZE && area >= MIN_BLOB_AREA) {
-          var bw = maxX - minX + 1, bh = maxY - minY + 1;
-          var aspectRatio = bw / Math.max(bh, 1);
-          // 宽高比过滤：人形 ≈ 0.3~0.6，横宽（购物车、并排的人）排除或降低优先级
-          blobs.push({
-            cx: (minX + maxX) / 2,
-            cy: (minY + maxY) / 2,
-            w: bw, h: bh,
-            area: area,
-            aspectRatio: aspectRatio
-          });
+        if(area>=MIN_BLOB_SIZE&&area>=MIN_BLOB_AREA){
+          var bw=maxX-minX+1,bh=maxY-minY+1;
+          blobs.push({cx:(minX+maxX)/2,cy:(minY+maxY)/2,w:bw,h:bh,area:area,aspectRatio:bw/Math.max(bh,1)});
         }
       }
     }
@@ -577,383 +382,153 @@ function findBlobs(mask, w, h) {
   return blobs;
 }
 
-// ============================================================
-//  主检测循环（5 项改进）
-//  ① 方向向量判定（Δx, Δy → 进/出）
-//  ② 速度预测追踪（vx, vy 预测下一帧位置）
-//  ③ 宽高比过滤（排除购物车/横影）
-//  ④ 持续性验证（连续 N 帧确认）
-//  ⑤ 自适应阈值（根据亮度动态调整）
-// ============================================================
-var lastCountedFrame = {};  // trailId → frameNum，防重复计数
-
-function detect() {
-  if (!counting) return;
-
-  var vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) { requestAnimationFrame(detect); return; }
-
-  // 离屏处理画布（降采样）
-  var scale = PROCESS_W / vw;
-  var pw = PROCESS_W;
-  var ph = Math.round(vh * scale);
-  offscreen.width = pw; offscreen.height = ph;
-  offCtx.drawImage(video, 0, 0, pw, ph);
-  var frame = offCtx.getImageData(0, 0, pw, ph);
-
-  // ── ⑤ 自适应阈值：计算当前帧平均亮度 ──
-  var sumBright = 0, pixelCount = frame.data.length / 4;
-  for (var bi = 0; bi < frame.data.length; bi += 4) {
-    sumBright += (frame.data[bi] + frame.data[bi+1] + frame.data[bi+2]) / 3;
-  }
-  var currentBrightness = sumBright / pixelCount;
-  runningBrightness = runningBrightness * 0.9 + currentBrightness * 0.1; // 指数滑动平均
-
-  // 阈值随亮度自适应：暗场景降低阈值，亮场景提高
-  var brightnessRatio = runningBrightness / 128;  // 1.0 = 中灰
-  var adaptiveThreshold = DIFF_THRESHOLD * brightnessRatio;
-  adaptiveThreshold = Math.max(15, Math.min(45, adaptiveThreshold)); // 钳位 [15, 45]
-
-  // 初始化/刷新参考帧
-  if (!refFrame || frameNum % REFRESH_REF_EVERY === 0) {
-    refFrame = offCtx.getImageData(0, 0, pw, ph);
-    frameNum++;
-    requestAnimationFrame(detect);
-    return;
-  }
+function detect(){
+  if(!counting)return;
+  var vw=video.videoWidth,vh=video.videoHeight;
+  if(!vw||!vh){requestAnimationFrame(detect);return}
+  var scale=PROCESS_W/vw,pw=PROCESS_W,ph=Math.round(vh*scale);
+  offscreen.width=pw;offscreen.height=ph;
+  offCtx.drawImage(video,0,0,pw,ph);
+  var frame=offCtx.getImageData(0,0,pw,ph);
+  var sumB=0;
+  for(var bi=0;bi<frame.data.length;bi+=4)sumB+=(frame.data[bi]+frame.data[bi+1]+frame.data[bi+2])/3;
+  runningBrightness=runningBrightness*0.9+(sumB/(frame.data.length/4))*0.1;
+  var aThresh=DIFF_THRESHOLD*(runningBrightness/128);
+  aThresh=Math.max(15,Math.min(45,aThresh));
+  if(!refFrame||frameNum%REFRESH_REF_EVERY===0){refFrame=offCtx.getImageData(0,0,pw,ph);frameNum++;requestAnimationFrame(detect);return}
   frameNum++;
-
-  // 帧差
-  var mask = new Uint8Array(pw * ph);
-  for (var i = 0; i < frame.data.length; i += 4) {
-    var dr = Math.abs(frame.data[i] - refFrame.data[i]);
-    var dg = Math.abs(frame.data[i+1] - refFrame.data[i+1]);
-    var db = Math.abs(frame.data[i+2] - refFrame.data[i+2]);
-    mask[i/4] = Math.max(dr, dg, db) > adaptiveThreshold ? 1 : 0;
+  var mask=new Uint8Array(pw*ph);
+  for(var i=0;i<frame.data.length;i+=4){
+    mask[i/4]=Math.max(Math.abs(frame.data[i]-refFrame.data[i]),Math.abs(frame.data[i+1]-refFrame.data[i+1]),Math.abs(frame.data[i+2]-refFrame.data[i+2]))>aThresh?1:0;
   }
-
-  // 找团块
-  var blobs = findBlobs(mask, pw, ph);
-
-  // ── ③ 宽高比过滤 ──
-  var validBlobs = [];
-  for (var vb = 0; vb < blobs.length; vb++) {
-    if (blobs[vb].aspectRatio <= MAX_ASPECT_RATIO) {
-      validBlobs.push(blobs[vb]);
+  var blobs=findBlobs(mask,pw,ph);
+  var validBlobs=[];
+  for(var vb=0;vb<blobs.length;vb++)if(blobs[vb].aspectRatio<=MAX_ASPECT_RATIO)validBlobs.push(blobs[vb]);
+  var isShaking=validBlobs.length>SHAKE_BLOB_LIMIT;
+  if(isShaking)lastShakeTime=Date.now();
+  var shakeActive=(Date.now()-lastShakeTime)<SHAKE_SUPPRESS_MS;
+  overlay.width=vw;overlay.height=vh;
+  if(shakeActive){octx.fillStyle='rgba(255,61,92,.5)';octx.font='bold 14px sans-serif';octx.fillText('\u26a0 \u76f8\u673a\u6643\u52a8\uff0c\u6682\u505c\u8ba1\u6570',20,40)}
+  var matched={},nowFrame=frameNum;
+  for(var b=0;b<validBlobs.length;b++){
+    var blob=validBlobs[b],bx=blob.cx/scale,by=blob.cy/scale,bw=blob.w/scale,bh=blob.h/scale;
+    var trailId=null,bestDist=TRACK_MAX_GAP;
+    var keys=Object.keys(blobTrails);
+    for(var k=0;k<keys.length;k++){
+      var id=parseInt(keys[k]),t=blobTrails[id];
+      var px=t.cx+(t.vx||0),py=t.cy+(t.vy||0),dx=bx-px,dy=by-py;
+      if(Math.sqrt(dx*dx+dy*dy)<bestDist){bestDist=Math.sqrt(dx*dx+dy*dy);trailId=id}
     }
-  }
-
-  // ── 抖动检测：团块数量异常多 → 相机在晃动 → 暂时抑制 ──
-  var isShaking = validBlobs.length > SHAKE_BLOB_LIMIT;
-  if (isShaking) {
-    lastShakeTime = Date.now();
-  }
-  var shakeActive = (Date.now() - lastShakeTime) < SHAKE_SUPPRESS_MS;
-
-  // 叠加层画布
-  overlay.width = vw; overlay.height = vh;
-
-  // 抖动时画提示
-  if (shakeActive) {
-    octx.fillStyle = 'rgba(255,61,92,.6)';
-    octx.font = 'bold 16px sans-serif';
-    octx.fillText('\u26a0 \u76f8\u673a\u6643\u52a8\uff0c\u6682\u505c\u8ba1\u6570', 20, 40);
-  }
-
-  var matched = {};
-  var nowFrame = frameNum;
-
-  for (var b = 0; b < validBlobs.length; b++) {
-    var blob = validBlobs[b];
-    var bx = blob.cx / scale, by = blob.cy / scale;
-    var bw = blob.w / scale, bh = blob.h / scale;
-
-    // ── ② 速度预测追踪 ──
-    var trailId = null;
-    var bestDist = TRACK_MAX_GAP;
-    var keys = Object.keys(blobTrails);
-    for (var k = 0; k < keys.length; k++) {
-      var id = parseInt(keys[k]);
-      var t = blobTrails[id];
-      // 预测下一帧位置：predX = cx + vx, predY = cy + vy
-      var predCx = t.cx + (t.vx || 0);
-      var predCy = t.cy + (t.vy || 0);
-      var dx = bx - predCx, dy = by - predCy;
-      var dist = Math.sqrt(dx*dx + dy*dy);
-      if (dist < bestDist) { bestDist = dist; trailId = id; }
-    }
-
-    if (trailId === null) {
-      // 新团块——初始化追踪，暂不计入有效目标
-      trailId = nextTrailId++;
-      blobTrails[trailId] = {
-        cx: bx, cy: by, prevCx: bx, prevCy: by,
-        vx: 0, vy: 0,
-        counted: false, life: 10,
-        persistCount: 1           // ④ 持续性计数从 1 开始
-      };
-    } else {
-      var t = blobTrails[trailId];
-      // ── ② 更新速度向量 ──
-      t.vx = bx - t.cx;
-      t.vy = by - t.cy;
-      t.prevCx = t.cx;
-      t.prevCy = t.cy;
-      t.cx = bx; t.cy = by;
-      t.life = 10;
-      // ── ④ 持续性验证 ──
-      t.persistCount = Math.min((t.persistCount || 0) + 1, PERSIST_FRAMES + 1);
-
-      // ── ① 方向向量判定进/出 ──
-      // 只有持续性达标且未计数且冷却已过的目标才判定
-      var isPersistent = t.persistCount >= PERSIST_FRAMES;
-      var cooldownPassed = !lastCountedFrame[trailId] ||
-                           (nowFrame - lastCountedFrame[trailId]) > COOLDOWN_FRAMES;
-
-      if (!t.counted && isPersistent && cooldownPassed && !shakeActive) {
-        var prevX = t.prevCx / vw, curX = t.cx / vw;
-
-        var tooClose = false;
-        var scKeys = Object.keys(spatialCooldowns);
-        for (var sc = 0; sc < scKeys.length; sc++) {
-          var scKey = scKeys[sc];
-          var scData = spatialCooldowns[scKey];
-          if (Date.now() - scData.time < 3000) {
-            var sdx = t.cx - scData.x, sdy = t.cy - scData.y;
-            if (Math.sqrt(sdx*sdx + sdy*sdy) < SPATIAL_COOLDOWN) {
-              tooClose = true;
-              break;
-            }
-          } else {
-            delete spatialCooldowns[scKey];
-          }
+    if(trailId===null){
+      trailId=nextTrailId++;
+      blobTrails[trailId]={cx:bx,cy:by,prevCx:bx,prevCy:by,vx:0,vy:0,counted:false,life:10,persistCount:1};
+    }else{
+      var t=blobTrails[trailId];
+      t.vx=bx-t.cx;t.vy=by-t.cy;t.prevCx=t.cx;t.prevCy=t.cy;
+      t.cx=bx;t.cy=by;t.life=10;
+      t.persistCount=Math.min((t.persistCount||0)+1,PERSIST_FRAMES+1);
+      var isP=t.persistCount>=PERSIST_FRAMES;
+      var cdPassed=!lastCountedFrame[trailId]||(nowFrame-lastCountedFrame[trailId])>COOLDOWN_FRAMES;
+      if(!t.counted&&isP&&cdPassed&&!shakeActive){
+        var prevX=t.prevCx/vw,curX=t.cx/vw;
+        var tooClose=false;
+        var scK=Object.keys(spatialCooldowns);
+        for(var sc=0;sc<scK.length;sc++){
+          var sd=spatialCooldowns[scK[sc]];
+          if(Date.now()-sd.time<3000){if(Math.sqrt(Math.pow(t.cx-sd.x,2)+Math.pow(t.cy-sd.y,2))<SPATIAL_COOLDOWN){tooClose=true;break}}
+          else delete spatialCooldowns[scK[sc]];
         }
-
-        if (!tooClose) {
-          // 竖直线：任意方向跨线即计数
-          if ((prevX > COUNT_LINE && curX <= COUNT_LINE) ||
-              (prevX < COUNT_LINE && curX >= COUNT_LINE)) {
-            totalCount++;
-            t.counted = true;
-            lastCountedFrame[trailId] = nowFrame;
-            spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
-            updateUI();
-            saveHourly();
-            flashCard('cardTotal');
-          }
-          setStatus('检测到: ' + totalCount + ' 人次', true);
+        if(!tooClose&&((prevX>COUNT_LINE&&curX<=COUNT_LINE)||(prevX<COUNT_LINE&&curX>=COUNT_LINE))){
+          totalCount++;
+          t.counted=true;lastCountedFrame[trailId]=nowFrame;
+          spatialCooldowns['sc'+(nextSpatialId++)]={x:t.cx,y:t.cy,time:Date.now()};
+          updateUI();saveHourly();flashCard('cardTotal');
+          setStatus('检测到: '+totalCount+' 人次',true);
         }
       }
     }
-    matched[trailId] = true;
-
-    // 画检测框
-    var tt = blobTrails[trailId];
-    var isPersistent = (tt.persistCount || 0) >= PERSIST_FRAMES;
-
-    if (tt.counted) {
-      octx.strokeStyle = 'rgba(0,230,118,.7)';  // 绿色=已计数
-    } else if (isPersistent) {
-      octx.strokeStyle = 'rgba(0,229,255,.7)';  // 青色=持续追踪中
-    } else {
-      octx.strokeStyle = 'rgba(255,215,64,.4)'; // 淡金=验证中
-    }
-    octx.lineWidth = isPersistent ? 2.5 : 1.5;
-    octx.strokeRect(bx - bw/2, by - bh/2, bw, bh);
-
-    if (tt.counted) {
-      octx.fillStyle = 'rgba(0,230,118,.8)';
-      octx.font = 'bold 12px sans-serif';
-      octx.fillText('\u2713', bx + bw/2 + 4, by - bh/2 + 14);
-    } else if (isPersistent) {
-      // 画运动方向线
-      var vx = tt.vx || 0, vy = tt.vy || 0;
-      if (Math.abs(vx) > 1 || Math.abs(vy) > 1) {
-        octx.strokeStyle = 'rgba(0,229,255,.3)';
-        octx.lineWidth = 1;
-        octx.beginPath();
-        octx.moveTo(bx, by);
-        octx.lineTo(bx + vx * 2, by + vy * 2);
-        octx.stroke();
-      }
-      // 持久性指示器
-      octx.fillStyle = 'rgba(0,229,255,.6)';
-      octx.font = '9px sans-serif';
-      octx.fillText(tt.persistCount + '/' + PERSIST_FRAMES, bx - bw/2, by - bh/2 - 3);
-    }
+    matched[trailId]=true;
+    var tt=blobTrails[trailId],isP=(tt.persistCount||0)>=PERSIST_FRAMES;
+    octx.strokeStyle=tt.counted?'rgba(0,230,118,.6)':isP?'rgba(0,229,255,.6)':'rgba(255,215,64,.3)';
+    octx.lineWidth=isP?2.5:1.5;
+    octx.strokeRect(bx-bw/2,by-bh/2,bw,bh);
+    if(tt.counted){octx.fillStyle='rgba(0,230,118,.7)';octx.font='bold 11px sans-serif';octx.fillText('\u2713',bx+bw/2+4,by-bh/2+13)}
+    else if(isP){octx.fillStyle='rgba(0,229,255,.5)';octx.font='9px sans-serif';octx.fillText(tt.persistCount+'/'+PERSIST_FRAMES,bx-bw/2,by-bh/2-3)}
   }
-
-  // 清理追踪
-  var allKeys = Object.keys(blobTrails);
-  for (var kk = 0; kk < allKeys.length; kk++) {
-    var tid = parseInt(allKeys[kk]);
-    if (!matched[tid]) {
-      blobTrails[tid].life--;
-      if (blobTrails[tid].life <= 0) {
-        delete blobTrails[tid];
-        delete lastCountedFrame[tid];
-      }
-    }
-  }
-
-  // 画竖直线
-  var lineX = vw * COUNT_LINE;
-  octx.strokeStyle = 'rgba(0,229,255,.4)';
-  octx.lineWidth = 2;
-  octx.setLineDash([10, 8]);
-  octx.beginPath();
-  octx.moveTo(lineX, 0);
-  octx.lineTo(lineX, vh);
-  octx.stroke();
-  octx.setLineDash([]);
-
-  // 标注
-  octx.fillStyle = 'rgba(0,229,255,.5)';
-  octx.font = 'bold 13px sans-serif';
-  octx.fillText('\u25c6 \u8ba1\u6570\u7ebf', lineX - 70, 28);
-
+  var allK=Object.keys(blobTrails);
+  for(var kk=0;kk<allK.length;kk++){var tid=parseInt(allK[kk]);if(!matched[tid]){blobTrails[tid].life--;if(blobTrails[tid].life<=0){delete blobTrails[tid];delete lastCountedFrame[tid]}}}
+  var lineX=vw*COUNT_LINE;
+  octx.strokeStyle='rgba(0,229,255,.35)';octx.lineWidth=1.5;octx.setLineDash([8,6]);
+  octx.beginPath();octx.moveTo(lineX,0);octx.lineTo(lineX,vh);octx.stroke();octx.setLineDash([]);
+  octx.fillStyle='rgba(0,229,255,.4)';octx.font='bold 11px sans-serif';octx.fillText('\u25c6 \u8ba1\u6570\u7ebf',lineX-60,26);
   requestAnimationFrame(detect);
 }
 
-// ============================================================
-//  UI 更新
-// ============================================================
-function updateUI() {
-  document.getElementById('nTotal').textContent = totalCount;
+function updateUI(){document.getElementById('nTotal').textContent=totalCount}
+function flashCard(id){
+  var card=document.getElementById(id),num=card.querySelector('.num');
+  num.classList.add('pop');card.classList.add('flash');
+  setTimeout(function(){num.classList.remove('pop');card.classList.remove('flash')},200);
 }
-
-function flashCard(id) {
-  var card = document.getElementById(id);
-  var num = card.querySelector('.num');
-  num.classList.add('pop');
-  card.classList.add('flash');
-  setTimeout(function() { num.classList.remove('pop'); card.classList.remove('flash'); }, 200);
+function setStatus(msg,active){
+  document.getElementById('statusText').textContent=msg;
+  document.getElementById('statusDot').className=active?'on':'';
 }
-
-function setStatus(msg, active) {
-  document.getElementById('statusText').textContent = msg;
-  var dot = document.getElementById('statusDot');
-  dot.className = active ? 'on' : '';
+function toggle(){
+  counting=!counting;
+  var btn=document.getElementById('btnGo'),rec=document.getElementById('recDot'),line=document.getElementById('countLine');
+  if(counting){btn.textContent='\u23f8 \u6682\u505c';btn.classList.add('running');rec.classList.add('active');line.classList.add('active');setStatus('检测中...',true);showToast('\u{1f534} \u8ba1\u6570\u5df2\u5f00\u59cb');requestAnimationFrame(detect)}
+  else{btn.textContent='\u25b6 \u5f00\u59cb\u8ba1\u6570';btn.classList.remove('running');rec.classList.remove('active');line.classList.remove('active');setStatus('已暂停',false);saveHourly()}
 }
-
-// ============================================================
-//  控制
-// ============================================================
-function toggle() {
-  counting = !counting;
-  var btn = document.getElementById('btnGo');
-  var rec = document.getElementById('recDot');
-  var line = document.getElementById('countLine');
-
-  if (counting) {
-    btn.textContent = '\u23f8 暂停';
-    btn.classList.add('running');
-    rec.classList.add('active');
-    line.classList.add('active');
-    setStatus('检测中...', true);
-    showToast('\u{1f534} 计数已开始');
-    requestAnimationFrame(detect);
-  } else {
-    btn.textContent = '\u25b6 开始计数';
-    btn.classList.remove('running');
-    rec.classList.remove('active');
-    line.classList.remove('active');
-    setStatus('已暂停', false);
-    saveHourly();
-  }
+function resetAll(){
+  totalCount=0;hourly={};refFrame=null;blobTrails={};nextTrailId=0;frameNum=0;
+  lastCountedFrame={};spatialCooldowns={};nextSpatialId=0;lastShakeTime=0;
+  updateUI();setStatus('已重置',false);showToast('\u21ba \u6570\u636e\u5df2\u6e05\u96f6');
 }
-
-function resetAll() {
-  totalCount = 0;
-  hourly = {}; refFrame = null;
-  blobTrails = {}; nextTrailId = 0; frameNum = 0;
-  lastCountedFrame = {};
-  spatialCooldowns = {}; nextSpatialId = 0;
-  lastShakeTime = 0;
-  updateUI();
-  setStatus('已重置', false);
-  showToast('\u21ba 数据已清零');
+function saveHourly(){
+  var h=new Date().getHours();if(h!==currentHour)currentHour=h;
+  var key=h+':00-'+(h+1)+':00';if(!hourly[key])hourly[key]=0;
+  hourly[key]=Math.max(hourly[key],totalCount);
 }
-
-function saveHourly() {
-  var h = new Date().getHours();
-  if (h !== currentHour) { currentHour = h; }
-  var key = h + ':00-' + (h+1) + ':00';
-  if (!hourly[key]) hourly[key] = 0;
-  hourly[key] = Math.max(hourly[key], totalCount);
-}
-
-// ============================================================
-//  倒计时
-// ============================================================
-function showTimerModal() {
-  document.getElementById('modal').classList.add('show');
-  document.getElementById('minInp').focus();
-}
-function closeModal() {
+function showTimerModal(){document.getElementById('modal').classList.add('show');document.getElementById('minInp').focus()}
+function startTimer(){
+  var min=parseInt(document.getElementById('minInp').value)||60;
+  timerSeconds=min*60;timerRemaining=timerSeconds;
   document.getElementById('modal').classList.remove('show');
-}
-function startTimer() {
-  var min = parseInt(document.getElementById('minInp').value) || 60;
-  timerSeconds = min * 60; timerRemaining = timerSeconds;
-  closeModal();
+  document.getElementById('timerBox').classList.add('active');
+  document.getElementById('timerCancel').classList.add('show');
   updateTimerDisplay();
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(function() {
-    timerRemaining--;
-    updateTimerDisplay();
-    if (timerRemaining <= 0) {
-      clearInterval(timerInterval); timerInterval = null;
-      if (counting) toggle();
-      showToast('\u23f0 计时结束！');
-      setStatus('\u23f0 计时结束', false);
-      document.getElementById('timer').textContent = '--:--';
-      document.getElementById('timer').className = '';
-    }
-  }, 1000);
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(function(){
+    timerRemaining--;updateTimerDisplay();
+    if(timerRemaining<=0){clearInterval(timerInterval);timerInterval=null;document.getElementById('timerBox').classList.remove('active');document.getElementById('timerCancel').classList.remove('show');if(counting)toggle();showToast('\u23f0 \u8ba1\u65f6\u7ed3\u675f\uff01');document.getElementById('timer').textContent='--:--';document.getElementById('timer').className=''}
+  },1000);
 }
-function updateTimerDisplay() {
-  var el = document.getElementById('timer');
-  if (timerRemaining > 0) {
-    var m = Math.floor(timerRemaining / 60), s = timerRemaining % 60;
-    el.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-    el.className = timerRemaining < 60 ? 'urgent' : timerRemaining < 300 ? 'warn' : '';
-  } else {
-    el.textContent = '--:--'; el.className = '';
-  }
+function cancelTimer(){
+  if(timerInterval){clearInterval(timerInterval);timerInterval=null}
+  timerRemaining=0;document.getElementById('timer').textContent='--:--';document.getElementById('timer').className='';
+  document.getElementById('timerBox').classList.remove('active');document.getElementById('timerCancel').classList.remove('show');
+  showToast('计时已取消');
 }
-
-// ============================================================
-//  导出
-// ============================================================
-function exportExcel() {
-  saveHourly();
-  var hours = Object.keys(hourly).sort();
-  if (hours.length === 0) { showToast('暂无数据可导出'); return; }
-  var rows = [['时段', '人次']];
-  hours.forEach(function(h) {
-    rows.push([h, hourly[h] || 0]);
-  });
-  var total = hours.reduce(function(s,h){return s+(hourly[h]||0);}, 0);
-  rows.push(['合计', total]);
-  exportCSV(rows, '客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');
-  showToast('📊 CSV 已导出（可用 Excel 打开）');
+function updateTimerDisplay(){
+  var el=document.getElementById('timer');
+  if(timerRemaining>0){var m=Math.floor(timerRemaining/60),s=timerRemaining%60;el.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');el.className=timerRemaining<60?'urgent':timerRemaining<300?'warn':''}
+  else{el.textContent='--:--';el.className=''}
 }
-
-// ============================================================
-//  时钟
-// ============================================================
-function updateClock() {
-  var now = new Date();
-  document.getElementById('clockText').textContent =
-    now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+function exportExcel(){
+  saveHourly();var hours=Object.keys(hourly).sort();
+  if(hours.length===0){showToast('暂无数据可导出');return}
+  var rows=[['时段','人次']];
+  hours.forEach(function(h){rows.push([h,hourly[h]||0])});
+  var total=hours.reduce(function(s,h){return s+(hourly[h]||0)},0);
+  rows.push(['合计',total]);
+  exportCSV(rows,'客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');
+  showToast('\u{1f4ca} CSV \u5df2\u5bfc\u51fa\uff08\u53ef\u7528 Excel \u6253\u5f00\uff09');
 }
-setInterval(updateClock, 10000);
-updateClock();
-
-// ============================================================
-//  启动
-// ============================================================
+function updateClock(){
+  document.getElementById('clockText').textContent=new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
+}
+setInterval(updateClock,10000);updateClock();
 startCam();
 </script>
 </body>

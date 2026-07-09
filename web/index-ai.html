@@ -5,88 +5,168 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0a0a14">
+<meta name="theme-color" content="#080C14">
+<link rel="manifest" href="manifest.json">
 <title>客流统计 · AI</title>
 <style>
 :root {
   --cyan: #00E5FF; --gold: #FFD740; --red: #FF3D5C; --green: #00E676;
-  --bg: #080C14; --panel-bg: rgba(12,16,28,0.92);
-  --glass: rgba(255,255,255,0.04); --glass-border: rgba(255,255,255,0.08);
-  --text-dim: rgba(255,255,255,0.35);
+  --bg: #060911; --card: rgba(255,255,255,0.03);
+  --border: rgba(255,255,255,0.06); --text-dim: rgba(255,255,255,0.30);
+  --glow-cyan: 0 0 20px rgba(0,229,255,0.15);
 }
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:-apple-system,'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 
-#cam{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:1;filter:brightness(1.05) contrast(1.05);transition:filter .3s}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:100%;height:100%;overflow:hidden;background:var(--bg);
+  font-family:-apple-system,'SF Pro Display','PingFang SC','Microsoft YaHei',sans-serif;
+  -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+  background:radial-gradient(ellipse at 20% 50%,rgba(121,40,202,0.06) 0%,transparent 50%),
+             radial-gradient(ellipse at 80% 50%,rgba(0,229,255,0.04) 0%,transparent 50%),
+             var(--bg);
+}
+
+#cam{
+  position:absolute;top:0;left:0;width:100%;height:100%;
+  object-fit:cover;opacity:1;
+  filter:brightness(1.03) contrast(1.03);transition:filter .4s;
+}
 
 #overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;pointer-events:none}
 
 #countLine{
-  position:absolute;top:3%;bottom:3%;left:55%;width:2px;z-index:6;pointer-events:none;
-  background:linear-gradient(180deg,transparent,var(--cyan) 20%,var(--cyan) 80%,transparent);
-  box-shadow:0 0 16px rgba(0,229,255,.4);transition:box-shadow .3s;
+  position:absolute;top:4%;bottom:4%;left:55%;width:1.5px;z-index:6;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(121,40,202,.5) 15%,rgba(121,40,202,.5) 85%,transparent);
+  box-shadow:0 0 12px rgba(121,40,202,.25);transition:all .5s;
 }
-#countLine.active{box-shadow:0 0 28px var(--cyan)}
+#countLine.active{box-shadow:0 0 24px rgba(121,40,202,.5),0 0 48px rgba(121,40,202,.15);width:2px}
 
-#topBar{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;padding:max(12px,env(safe-area-inset-top,16px)) 16px 0}
-#badge{background:linear-gradient(135deg,#7928CA,#FF0080);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;letter-spacing:1px}
-#recDot{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red);opacity:0;transition:opacity .3s}
-#recDot.active{opacity:1;animation:pulse 1.5s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-#clockText{color:var(--text-dim);font-size:13px;font-variant-numeric:tabular-nums}
+#topBar{
+  position:absolute;top:0;left:0;right:0;z-index:20;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:max(14px,env(safe-area-inset-top,18px)) 16px 8px;
+  background:linear-gradient(180deg,rgba(6,9,17,.7),transparent);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+#badge{
+  background:linear-gradient(135deg,#7928CA,#FF0080);
+  color:#fff;font-size:10px;font-weight:700;
+  padding:3px 10px;border-radius:10px;letter-spacing:1px;
+  box-shadow:0 2px 12px rgba(121,40,202,.3);
+}
+#recDot{width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red);opacity:0;transition:opacity .3s}
+#recDot.active{opacity:1;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 6px var(--red)}50%{opacity:.3;box-shadow:0 0 12px var(--red)}}
+#clockText{color:var(--text-dim);font-size:12px;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:.5px}
 
 #timerBox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:15;text-align:center;pointer-events:none}
 #timerBox.active{pointer-events:auto}
-#timerCancel{display:none;margin-top:8px;padding:6px 16px;border-radius:16px;border:1px solid rgba(255,61,92,.4);background:rgba(255,61,92,.15);color:var(--red);font-size:12px;cursor:pointer;letter-spacing:.5px}
+#timerCancel{display:none;margin-top:10px;padding:6px 18px;border-radius:20px;border:1px solid rgba(255,61,92,.3);background:rgba(255,61,92,.1);color:var(--red);font-size:12px;cursor:pointer;letter-spacing:.5px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 #timerCancel.show{display:inline-block}
-#timer{font-size:56px;font-weight:200;color:var(--cyan);letter-spacing:4px;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(0,229,255,.3);transition:color .4s}
-#timer.warn{color:var(--gold);text-shadow:0 0 20px rgba(255,215,64,.4)}
-#timer.urgent{color:var(--red);text-shadow:0 0 20px rgba(255,61,92,.4);animation:shake .5s}
-@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
-#timerLabel{font-size:11px;color:var(--text-dim);margin-top:2px;letter-spacing:2px}
+#timerCancel:active{background:rgba(255,61,92,.25)}
+#timer{font-size:52px;font-weight:200;color:var(--cyan);letter-spacing:5px;font-variant-numeric:tabular-nums;text-shadow:0 0 30px rgba(0,229,255,.25);transition:color .4s}
+#timer.warn{color:var(--gold);text-shadow:0 0 30px rgba(255,215,64,.3)}
+#timer.urgent{color:var(--red);text-shadow:0 0 30px rgba(255,61,92,.3);animation:shake .5s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+#timerLabel{font-size:10px;color:var(--text-dim);margin-top:3px;letter-spacing:3px;text-transform:uppercase;opacity:0.5}
 
-#panel{position:absolute;bottom:0;left:0;right:0;z-index:20;background:linear-gradient(180deg,transparent,var(--panel-bg) 30%);padding:12px 16px max(16px,env(safe-area-inset-bottom,16px));backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
-#stats{display:flex;justify-content:space-around;margin-bottom:14px;padding:0 4px}
-.statCard{text-align:center;padding:8px 12px;background:var(--glass);border-radius:14px;border:1px solid var(--glass-border);min-width:72px;transition:all .2s}
-.statCard.flash{background:rgba(0,229,255,.12);border-color:rgba(0,229,255,.3)}
-.statCard .num{font-size:30px;font-weight:300;color:var(--cyan);font-variant-numeric:tabular-nums;line-height:1.1;transition:transform .15s}
-.statCard .num.pop{transform:scale(1.2);color:#fff}
-.statCard .lbl{font-size:10px;color:var(--text-dim);margin-top:3px;letter-spacing:1px}
-.statCard.gold .num{color:var(--gold)}
-.statCard.green .num{color:var(--green)}
+#panel{
+  position:absolute;bottom:0;left:0;right:0;z-index:20;
+  background:linear-gradient(180deg,transparent 0%,rgba(6,9,17,.85) 30%,rgba(6,9,17,.95) 100%);
+  padding:20px 16px max(20px,env(safe-area-inset-bottom,20px));
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+}
+
+#stats{display:flex;justify-content:center;margin-bottom:18px}
+.statCard{
+  text-align:center;padding:14px 32px;
+  background:var(--card);border-radius:20px;
+  border:1px solid var(--border);min-width:100px;
+  transition:all .25s;position:relative;
+}
+.statCard::after{
+  content:'';position:absolute;inset:-1px;border-radius:20px;
+  background:linear-gradient(135deg,rgba(121,40,202,.08),transparent 50%,rgba(0,229,255,.05));
+  z-index:-1;
+}
+.statCard.flash{background:rgba(121,40,202,.10);border-color:rgba(121,40,202,.25);box-shadow:0 0 20px rgba(121,40,202,.15)}
+.statCard .num{font-size:38px;font-weight:300;color:#fff;font-variant-numeric:tabular-nums;line-height:1;transition:transform .15s,color .15s}
+.statCard .num.pop{transform:scale(1.3);color:var(--cyan)}
+.statCard .lbl{font-size:10px;color:var(--text-dim);margin-top:5px;letter-spacing:2px;text-transform:uppercase;font-weight:500}
+
 #btns{display:flex;gap:10px;justify-content:center;align-items:center}
-.btn{padding:10px 20px;border-radius:24px;border:none;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:.5px;transition:all .15s;display:flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent}
-.btn:active{transform:scale(.94);opacity:.8}
-.btnStart{background:linear-gradient(135deg,#7928CA,#FF0080);color:#fff;box-shadow:0 4px 20px rgba(121,40,202,.4);padding:10px 28px}
-.btnStart.running{background:linear-gradient(135deg,var(--cyan),#00B8D4);box-shadow:0 4px 16px rgba(0,229,255,.3)}
-.btnTimer{background:rgba(255,215,64,.1);color:var(--gold);border:1px solid rgba(255,215,64,.25)}
-.btnExport{background:rgba(0,230,118,.1);color:var(--green);border:1px solid rgba(0,230,118,.25)}
-.btnReset{background:rgba(255,255,255,.06);color:var(--text-dim);border:1px solid var(--glass-border);padding:10px 14px}
-#statusBar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}
-#statusDot{width:5px;height:5px;border-radius:50%;background:var(--text-dim)}
+.btn{
+  padding:10px 18px;border-radius:22px;border:none;
+  font-size:13px;font-weight:600;cursor:pointer;
+  letter-spacing:.3px;transition:all .15s;
+  display:flex;align-items:center;gap:5px;
+  -webkit-tap-highlight-color:transparent;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+}
+.btn:active{transform:scale(.95)}
+.btnStart{
+  background:linear-gradient(135deg,#7928CA,#FF0080);
+  color:#fff;box-shadow:0 2px 16px rgba(121,40,202,.35);
+  padding:10px 24px;font-size:14px;
+}
+.btnStart:disabled{opacity:.5}
+.btnStart.running{
+  background:linear-gradient(135deg,#00C4D4,#008BA3);
+  box-shadow:0 2px 12px rgba(0,229,255,.25);
+}
+.btnTimer{background:rgba(255,215,64,.08);color:var(--gold);border:1px solid rgba(255,215,64,.15)}
+.btnExport{background:rgba(0,230,118,.08);color:var(--green);border:1px solid rgba(0,230,118,.15)}
+.btnReset{background:rgba(255,255,255,.04);color:var(--text-dim);border:1px solid var(--border);padding:10px 12px}
+
+#statusBar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px}
+#statusDot{width:4px;height:4px;border-radius:50%;background:var(--text-dim);transition:all .3s}
 #statusDot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
 #statusDot.loading{background:var(--gold);box-shadow:0 0 6px var(--gold);animation:pulse 1s infinite}
-#statusText{font-size:10px;color:var(--text-dim);letter-spacing:.5px}
-#modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:50;justify-content:center;align-items:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#statusText{font-size:10px;color:var(--text-dim);letter-spacing:.5px;font-weight:400}
+
+#modal{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.75);z-index:50;
+  justify-content:center;align-items:center;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
 #modal.show{display:flex}
-#modalInner{background:linear-gradient(145deg,rgba(20,24,42,.98),rgba(12,16,32,.98));border:1px solid rgba(0,229,255,.15);border-radius:20px;padding:24px;width:280px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-#modalInner h3{color:var(--cyan);font-size:15px;font-weight:500;margin-bottom:16px}
-#modalInner .field{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px}
-#modalInner input{width:64px;padding:8px 4px;background:rgba(255,255,255,.06);border:1px solid rgba(0,229,255,.2);border-radius:10px;color:var(--cyan);font-size:22px;text-align:center;outline:none}
+#modalInner{
+  background:linear-gradient(145deg,rgba(16,20,36,.98),rgba(8,12,24,.98));
+  border:1px solid rgba(121,40,202,.10);border-radius:24px;
+  padding:28px;width:280px;text-align:center;
+  box-shadow:0 24px 64px rgba(0,0,0,.5);
+}
+#modalInner h3{color:#fff;font-size:16px;font-weight:500;margin-bottom:18px}
+#modalInner .field{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:18px}
+#modalInner input{
+  width:68px;padding:10px 4px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(121,40,202,.15);
+  border-radius:12px;color:var(--cyan);font-size:24px;text-align:center;
+  font-weight:300;outline:none;transition:border-color .2s;
+}
 #modalInner input:focus{border-color:var(--cyan)}
-#modalInner .unit{color:var(--text-dim);font-size:14px}
-.modalBtn{padding:8px 18px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer}
-.modalBtn.confirm{background:var(--gold);color:#000}
-.modalBtn.cancel{background:rgba(255,255,255,.08);color:var(--text-dim)}
-#toast{position:fixed;top:60px;left:50%;transform:translateX(-50%) translateY(-20px);z-index:60;padding:8px 20px;border-radius:20px;background:rgba(0,0,0,.85);color:#fff;font-size:13px;opacity:0;transition:all .3s;pointer-events:none}
+#modalInner .unit{color:var(--text-dim);font-size:13px}
+.modalBtn{padding:10px 20px;border-radius:20px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.modalBtn:active{transform:scale(.95)}
+.modalBtn.confirm{background:linear-gradient(135deg,var(--gold),#E6A800);color:#000}
+.modalBtn.cancel{background:rgba(255,255,255,.06);color:var(--text-dim)}
+
+#toast{
+  position:fixed;top:50px;left:50%;transform:translateX(-50%) translateY(-10px);
+  z-index:60;padding:8px 20px;border-radius:20px;
+  background:rgba(0,0,0,.88);color:#fff;font-size:12px;font-weight:500;
+  opacity:0;transition:all .3s;pointer-events:none;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.08);
+}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* 模型加载覆盖层 */
-#loadingOverlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;background:rgba(0,0,0,.9);display:flex;flex-direction:column;justify-content:center;align-items:center}
-#loadingSpinner{width:40px;height:40px;border:3px solid var(--glass-border);border-top-color:var(--cyan);border-radius:50%;animation:spin 1s linear infinite}
+#loadingOverlay{position:fixed;inset:0;z-index:100;background:rgba(6,9,17,.95);display:flex;flex-direction:column;justify-content:center;align-items:center}
+#loadingSpinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-#loadingText{color:var(--cyan);font-size:14px;margin-top:16px;letter-spacing:1px}
+#loadingText{color:#fff;font-size:15px;margin-top:20px;letter-spacing:1px;font-weight:400}
 #loadingSub{color:var(--text-dim);font-size:11px;margin-top:6px}
-#fpsDisplay{position:absolute;top:8px;right:10px;z-index:18;font-size:10px;color:rgba(0,255,0,.6);font-variant-numeric:tabular-nums;pointer-events:none}
+#fpsDisplay{position:absolute;top:12px;right:14px;z-index:18;font-size:10px;color:rgba(0,230,118,.6);font-variant-numeric:tabular-nums;pointer-events:none;font-weight:500}
 </style>
 </head>
 <body>
@@ -100,7 +180,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
     <div id="recDot"></div>
     <span id="badge">AI</span>
   </div>
-  <div id="topRight"><span id="clockText"></span></div>
+  <span id="clockText"></span>
 </div>
 
 <div id="fpsDisplay"></div>
@@ -114,12 +194,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="loadingOverlay">
   <div id="loadingSpinner"></div>
   <div id="loadingText">正在加载 AI 模型...</div>
-  <div id="loadingSub">COCO-SSD · 人体检测</div>
+  <div id="loadingSub">COCO-SSD · 人体检测 · ~2.5MB</div>
 </div>
 
 <div id="panel">
   <div id="stats">
-    <div class="statCard green" id="cardTotal">
+    <div class="statCard" id="cardTotal">
       <div class="num" id="nTotal">0</div>
       <div class="lbl">总人次</div>
     </div>
@@ -139,7 +219,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="modal">
   <div id="modalInner">
     <h3>⏱ 设置倒计时</h3>
-    <div class="field"><input id="minInp" type="number" value="60" min="1" max="1440" inputmode="numeric"><span class="unit">分钟</span></div>
+    <div class="field">
+      <input id="minInp" type="number" value="60" min="1" max="1440" inputmode="numeric">
+      <span class="unit">分钟</span>
+    </div>
     <button class="modalBtn confirm" onclick="startTimer()">开始计时</button>
     <button class="modalBtn cancel" onclick="document.getElementById('modal').classList.remove('show')">取消</button>
   </div>
@@ -151,506 +234,161 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 
 <script>
-// ============================================================
-//  CSV 导出
-// ============================================================
-function exportCSV(rows, filename) {
-  var csv = rows.map(function(r) {
-    return r.map(function(c) { return '"'+String(c).replace(/"/g,'""')+'"'; }).join(',');
-  }).join('\n');
-  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a'); a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js')}
 
+function exportCSV(rows,f){
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',')}).join('\n');
+  var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download=f;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
 var toastTimer;
-function showToast(msg) {
-  var el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 1800);
+function showToast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(function(){e.classList.remove('show')},1800)}
+
+var totalCount=0,counting=false,modelLoaded=false;
+var hourly={},currentHour=new Date().getHours();
+var timerSeconds=0,timerRemaining=0,timerInterval=null;
+var video=document.getElementById('cam'),overlay=document.getElementById('overlay'),octx=overlay.getContext('2d');
+var model=null;
+var trails={},nextTrailId=0,lastCountedFrame={},spatialCooldowns={},nextSpatialId=0;
+var COUNT_LINE=0.55,IOU_THRESHOLD=0.3,PERSIST_FRAMES=3,COOLDOWN_FRAMES=30,SPATIAL_COOLDOWN=90,DETECT_INTERVAL=200,MIN_CONFIDENCE=0.45;
+var frameNum=0,lastDetectTime=0,fpsFrames=0,fpsTime=Date.now(),currentFPS=0;
+var loadAttempted=false;
+
+function startCam(){
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,min:15}},audio:false}).then(function(s){video.srcObject=s;return video.play()}).catch(function(){
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false}).then(function(s){video.srcObject=s;return video.play()}).catch(function(){setStatus('摄像头权限被拒',false)})
+  })
 }
 
-// ============================================================
-//  全局状态
-// ============================================================
-var totalCount = 0;
-var counting = false, modelLoaded = false;
-var hourly = {}, currentHour = new Date().getHours();
-var timerSeconds = 0, timerRemaining = 0, timerInterval = null;
-
-var video = document.getElementById('cam');
-var overlay = document.getElementById('overlay');
-var octx = overlay.getContext('2d');
-
-// AI 模型
-var model = null;
-
-// 追踪
-var trails = {};           // id → {cx,cy,vx,vy,prevCx,prevCy,counted,life,persistCount}
-var nextTrailId = 0;
-var lastCountedFrame = {};
-var spatialCooldowns = {};
-var nextSpatialId = 0;
-
-// 参数
-var COUNT_LINE = 0.55;     // 竖直线位置（画面 55% 宽度处，即中线偏右）
-var IOU_THRESHOLD = 0.3;    // IOU 匹配阈值
-var PERSIST_FRAMES = 3;     // 持续性验证
-var COOLDOWN_FRAMES = 30;   // 计数冷却（帧数）
-var SPATIAL_COOLDOWN = 90;  // 空间冷却（像素）
-var DETECT_INTERVAL = 200;  // 检测间隔（ms）
-var MIN_CONFIDENCE = 0.45;  // 最低置信度
-
-var frameNum = 0;
-var lastDetectTime = 0;
-var fpsFrames = 0, fpsTime = Date.now(), currentFPS = 0;
-
-// ============================================================
-//  加载 AI 模型（15秒超时保护）
-// ============================================================
-var loadAttempted = false;
-
-async function loadModel() {
-  if (loadAttempted) return;
-  loadAttempted = true;
-
-  // 15秒超时
-  var timeoutHandle = setTimeout(function() {
-    if (!modelLoaded) {
-      setStatus('模型加载超时 · 请确认梯子已开启后刷新', false);
-      showToast('⏰ 加载超时，请刷新重试');
-      document.getElementById('loadingOverlay').style.display = 'none';
-      document.getElementById('btnGo').disabled = false;
-      document.getElementById('btnGo').textContent = '🔄 点击刷新重试';
-      document.getElementById('btnGo').onclick = function() { location.reload(); };
-    }
-  }, 15000);
-
-  try {
-    // 检查全局变量是否存在
-    if (typeof cocoSsd === 'undefined') {
-      throw new Error('COCO-SSD 库未加载，请确认梯子已连接');
-    }
-    if (typeof tf === 'undefined') {
-      throw new Error('TensorFlow.js 库未加载');
-    }
-
-    setStatus('正在下载 AI 模型 (~2.5MB)...', 'loading');
-    showToast('⏳ AI 模型下载中，请稍候...');
-
-    // 加载模型
-    model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-
-    clearTimeout(timeoutHandle);
-    modelLoaded = true;
-    document.getElementById('loadingOverlay').style.display = 'none';
-    document.getElementById('btnGo').disabled = false;
-    document.getElementById('btnGo').textContent = '▶ 开始计数';
-    document.getElementById('btnGo').onclick = toggle;
-
-    setStatus('AI 模型就绪 · 点击「开始计数」启动', false);
+async function loadModel(){
+  if(loadAttempted)return;loadAttempted=true;
+  var to=setTimeout(function(){
+    if(!modelLoaded){setStatus('模型加载超时 · 请确认梯子后刷新',false);showToast('⏰ 加载超时');document.getElementById('loadingOverlay').style.display='none';document.getElementById('btnGo').disabled=false;document.getElementById('btnGo').textContent='🔄 点击刷新';document.getElementById('btnGo').onclick=function(){location.reload()}}
+  },15000);
+  try{
+    if(typeof cocoSsd==='undefined')throw new Error('COCO-SSD 库未加载，梯子开了吗？');
+    setStatus('正在下载 AI 模型 (~2.5MB)...','loading');showToast('⏳ 模型下载中...');
+    model=await cocoSsd.load({base:'lite_mobilenet_v2'});
+    clearTimeout(to);modelLoaded=true;
+    document.getElementById('loadingOverlay').style.display='none';
+    document.getElementById('btnGo').disabled=false;
+    document.getElementById('btnGo').textContent='▶ 开始计数';
+    document.getElementById('btnGo').onclick=toggle;
+    setStatus('AI 模型就绪 · 点击「开始计数」启动',false);
     showToast('✅ AI 模型加载完成');
     document.getElementById('statusDot').classList.remove('loading');
-
-  } catch (e) {
-    clearTimeout(timeoutHandle);
-    console.error('Model load error:', e);
-    var msg = e.message || '未知错误';
-    if (msg.indexOf('Failed to fetch') !== -1 || msg.indexOf('NetworkError') !== -1) {
-      msg = '网络不通，请确认梯子已连接后刷新';
-    }
-    setStatus('加载失败：' + msg, false);
-    showToast('❌ ' + msg);
-    document.getElementById('loadingOverlay').style.display = 'none';
-    document.getElementById('btnGo').disabled = false;
-    document.getElementById('btnGo').textContent = '🔄 点击刷新重试';
-    document.getElementById('btnGo').onclick = function() { location.reload(); };
+  }catch(e){
+    clearTimeout(to);console.error(e);
+    var m=e.message||'未知错误';
+    if(m.indexOf('Failed to fetch')!==-1||m.indexOf('NetworkError')!==-1)m='网络不通，请确认梯子已连接';
+    setStatus('加载失败：'+m,false);showToast('❌ '+m);
+    document.getElementById('loadingOverlay').style.display='none';
+    document.getElementById('btnGo').disabled=false;
+    document.getElementById('btnGo').textContent='🔄 点击刷新';
+    document.getElementById('btnGo').onclick=function(){location.reload()};
     document.getElementById('statusDot').classList.remove('loading');
   }
 }
 
-// ============================================================
-//  摄像头
-// ============================================================
-async function startCam() {
-  try {
-    var stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, min: 15 } },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-  } catch (e) {
-    try {
-      var stream2 = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, audio: false
-      });
-      video.srcObject = stream2;
-      await video.play();
-    } catch (e2) {
-      setStatus('\u6444\u50cf\u5934\u6743\u9650\u88ab\u62d2', false);
-    }
-  }
+function iou(a,b){
+  var ax1=a.cx-a.w/2,ay1=a.cy-a.h/2,ax2=a.cx+a.w/2,ay2=a.cy+a.h/2;
+  var bx1=b.cx-b.w/2,by1=b.cy-b.h/2,bx2=b.cx+b.w/2,by2=b.cy+b.h/2;
+  var ix1=Math.max(ax1,bx1),iy1=Math.max(ay1,by1),ix2=Math.min(ax2,bx2),iy2=Math.min(ay2,by2);
+  var iw=Math.max(0,ix2-ix1),ih=Math.max(0,iy2-iy1);
+  var intersection=iw*ih,union=a.w*a.h+b.w*b.h-intersection;
+  return union>0?intersection/union:0;
 }
 
-// ============================================================
-//  IOU 计算（交并比）
-// ============================================================
-function iou(a, b) {
-  var ax1 = a.cx - a.w/2, ay1 = a.cy - a.h/2, ax2 = a.cx + a.w/2, ay2 = a.cy + a.h/2;
-  var bx1 = b.cx - b.w/2, by1 = b.cy - b.h/2, bx2 = b.cx + b.w/2, by2 = b.cy + b.h/2;
-  var ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1);
-  var ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2);
-  var iw = Math.max(0, ix2 - ix1), ih = Math.max(0, iy2 - iy1);
-  var intersection = iw * ih;
-  var union = a.w * a.h + b.w * b.h - intersection;
-  return union > 0 ? intersection / union : 0;
-}
-
-// ============================================================
-//  AI 检测 + 追踪（主循环）
-// ============================================================
-async function detectAI() {
-  if (!counting || !modelLoaded) return;
-
-  var now = Date.now();
-  if (now - lastDetectTime < DETECT_INTERVAL) {
-    requestAnimationFrame(function() { detectAI(); });
-    return;
-  }
-  lastDetectTime = now;
-
-  var vw = video.videoWidth, vh = video.videoHeight;
-  if (!vw || !vh) { requestAnimationFrame(function() { detectAI(); }); return; }
-
-  try {
-    // ── AI 检测 ──
-    var predictions = await model.detect(video);
-    frameNum++;
-
-    // FPS 统计
-    fpsFrames++;
-    if (now - fpsTime > 1000) {
-      currentFPS = Math.round(fpsFrames * 1000 / (now - fpsTime));
-      fpsFrames = 0; fpsTime = now;
-      document.getElementById('fpsDisplay').textContent = currentFPS + ' FPS';
-    }
-
-    // 过滤：只保留 "person" 类且置信度达标
-    var persons = [];
-    for (var i = 0; i < predictions.length; i++) {
-      var p = predictions[i];
-      if (p.class === 'person' && p.score >= MIN_CONFIDENCE) {
-        persons.push({
-          cx: p.bbox[0] + p.bbox[2] / 2,
-          cy: p.bbox[1] + p.bbox[3] / 2,
-          w: p.bbox[2],
-          h: p.bbox[3],
-          score: p.score
-        });
+async function detectAI(){
+  if(!counting||!modelLoaded)return;
+  var now=Date.now();
+  if(now-lastDetectTime<DETECT_INTERVAL){requestAnimationFrame(function(){detectAI()});return}
+  lastDetectTime=now;
+  var vw=video.videoWidth,vh=video.videoHeight;
+  if(!vw||!vh){requestAnimationFrame(function(){detectAI()});return}
+  try{
+    var predictions=await model.detect(video);frameNum++;
+    fpsFrames++;if(now-fpsTime>1000){currentFPS=Math.round(fpsFrames*1000/(now-fpsTime));fpsFrames=0;fpsTime=now;document.getElementById('fpsDisplay').textContent=currentFPS+' FPS'}
+    var persons=[];
+    for(var i=0;i<predictions.length;i++){var p=predictions[i];if(p.class==='person'&&p.score>=MIN_CONFIDENCE)persons.push({cx:p.bbox[0]+p.bbox[2]/2,cy:p.bbox[1]+p.bbox[3]/2,w:p.bbox[2],h:p.bbox[3],score:p.score})}
+    overlay.width=vw;overlay.height=vh;
+    var matched={},used={};
+    for(var pi=0;pi<persons.length;pi++){
+      var person=persons[pi],trailId=null,bestIou=IOU_THRESHOLD;
+      var tKeys=Object.keys(trails);
+      for(var k=0;k<tKeys.length;k++){
+        var tid=parseInt(tKeys[k]);if(used[tid])continue;
+        var t=trails[tid],predCx=t.cx+(t.vx||0),predCy=t.cy+(t.vy||0);
+        var iouScore=iou({cx:person.cx,cy:person.cy,w:person.w,h:person.h},{cx:predCx,cy:predCy,w:t.w,h:t.h});
+        if(iouScore>bestIou){bestIou=iouScore;trailId=tid}
       }
-    }
-
-    // ── 追踪匹配 ──
-    overlay.width = vw; overlay.height = vh;
-
-    var matched = {};
-    var usedTrails = {};
-
-    for (var pi = 0; pi < persons.length; pi++) {
-      var person = persons[pi];
-      var trailId = null;
-      var bestIou = IOU_THRESHOLD;
-
-      var trailKeys = Object.keys(trails);
-      for (var k = 0; k < trailKeys.length; k++) {
-        var tid = parseInt(trailKeys[k]);
-        if (usedTrails[tid]) continue;
-        var t = trails[tid];
-
-        // 速度预测位置
-        var predCx = t.cx + (t.vx || 0);
-        var predCy = t.cy + (t.vy || 0);
-
-        var iouScore = iou(
-          { cx: person.cx, cy: person.cy, w: person.w, h: person.h },
-          { cx: predCx, cy: predCy, w: t.w, h: t.h }
-        );
-
-        if (iouScore > bestIou) {
-          bestIou = iouScore;
-          trailId = tid;
-        }
-      }
-
-      if (trailId === null) {
-        // 新人
-        trailId = nextTrailId++;
-        trails[trailId] = {
-          cx: person.cx, cy: person.cy, prevCx: person.cx, prevCy: person.cy,
-          vx: 0, vy: 0,
-          w: person.w, h: person.h,
-          counted: false, life: 10,
-          persistCount: 1,
-          score: person.score
-        };
-      } else {
-        var t = trails[trailId];
-        t.vx = person.cx - t.cx;
-        t.vy = person.cy - t.cy;
-        t.prevCx = t.cx;
-        t.prevCy = t.cy;
-        t.cx = person.cx; t.cy = person.cy;
-        t.w = person.w; t.h = person.h;
-        t.life = 10;
-        t.score = person.score;
-        t.persistCount = Math.min((t.persistCount || 0) + 1, PERSIST_FRAMES + 1);
-
-        // ── 计数判定 ──
-        var isPersistent = t.persistCount >= PERSIST_FRAMES;
-        var cooldownPassed = !lastCountedFrame[trailId] ||
-                             (frameNum - lastCountedFrame[trailId]) > COOLDOWN_FRAMES;
-
-        if (!t.counted && isPersistent && cooldownPassed) {
-          var prevX = t.prevCx / vw, curX = t.cx / vw;
-
-          // 空间冷却检查
-          var tooClose = false;
-          var scKeys = Object.keys(spatialCooldowns);
-          for (var sc = 0; sc < scKeys.length; sc++) {
-            var scData = spatialCooldowns[scKeys[sc]];
-            if (Date.now() - scData.time < 3000) {
-              var sdx = t.cx - scData.x, sdy = t.cy - scData.y;
-              if (Math.sqrt(sdx*sdx + sdy*sdy) < SPATIAL_COOLDOWN) {
-                tooClose = true; break;
-              }
-            } else {
-              delete spatialCooldowns[scKeys[sc]];
-            }
+      if(trailId===null){
+        trailId=nextTrailId++;
+        trails[trailId]={cx:person.cx,cy:person.cy,prevCx:person.cx,prevCy:person.cy,vx:0,vy:0,w:person.w,h:person.h,counted:false,life:10,persistCount:1,score:person.score};
+      }else{
+        var t=trails[trailId];t.vx=person.cx-t.cx;t.vy=person.cy-t.cy;t.prevCx=t.cx;t.prevCy=t.cy;t.cx=person.cx;t.cy=person.cy;t.w=person.w;t.h=person.h;t.life=10;t.score=person.score;
+        t.persistCount=Math.min((t.persistCount||0)+1,PERSIST_FRAMES+1);
+        var isP=t.persistCount>=PERSIST_FRAMES;
+        var cdPassed=!lastCountedFrame[trailId]||(frameNum-lastCountedFrame[trailId])>COOLDOWN_FRAMES;
+        if(!t.counted&&isP&&cdPassed){
+          var prevX=t.prevCx/vw,curX=t.cx/vw;
+          var tooClose=false;
+          var scK=Object.keys(spatialCooldowns);
+          for(var sc=0;sc<scK.length;sc++){
+            var sd=spatialCooldowns[scK[sc]];
+            if(Date.now()-sd.time<3000){if(Math.sqrt(Math.pow(t.cx-sd.x,2)+Math.pow(t.cy-sd.y,2))<SPATIAL_COOLDOWN){tooClose=true;break}}
+            else delete spatialCooldowns[scK[sc]];
           }
-
-          if (!tooClose) {
-            // 竖直线：任意方向跨线即计数一次
-            if ((prevX > COUNT_LINE && curX <= COUNT_LINE) ||
-                (prevX < COUNT_LINE && curX >= COUNT_LINE)) {
-              totalCount++;
-              t.counted = true;
-              lastCountedFrame[trailId] = frameNum;
-              spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
-              updateUI(); saveHourly(); flashCard('cardTotal');
-              setStatus('检测到: ' + totalCount + ' 人次 | ' + currentFPS + ' FPS', true);
-            }
+          if(!tooClose&&((prevX>COUNT_LINE&&curX<=COUNT_LINE)||(prevX<COUNT_LINE&&curX>=COUNT_LINE))){
+            totalCount++;t.counted=true;lastCountedFrame[trailId]=frameNum;
+            spatialCooldowns['sc'+(nextSpatialId++)]={x:t.cx,y:t.cy,time:Date.now()};
+            updateUI();saveHourly();flashCard('cardTotal');
+            setStatus('检测到: '+totalCount+' 人次 | '+currentFPS+' FPS',true);
           }
         }
       }
-
-      matched[trailId] = true;
-      usedTrails[trailId] = true;
-
-      // 画框
-      var tt = trails[trailId];
-      var isPersistent = (tt.persistCount || 0) >= PERSIST_FRAMES;
-      var confidence = tt.score || 0;
-
-      if (tt.counted) {
-        octx.strokeStyle = 'rgba(0,230,118,.8)';
-        octx.lineWidth = 3;
-      } else if (isPersistent) {
-        octx.strokeStyle = 'rgba(0,229,255,.8)';
-        octx.lineWidth = 2.5;
-      } else {
-        octx.strokeStyle = 'rgba(255,215,64,.5)';
-        octx.lineWidth = 1.5;
-      }
-      octx.strokeRect(person.cx - person.w/2, person.cy - person.h/2, person.w, person.h);
-
-      // 标签
-      var label = (tt.counted ? '\u2713 ' : '') + Math.round(confidence * 100) + '%';
-      octx.fillStyle = tt.counted ? 'rgba(0,230,118,.9)' : isPersistent ? 'rgba(0,229,255,.9)' : 'rgba(255,215,64,.7)';
-      octx.font = 'bold 11px sans-serif';
-      var labelY = person.cy - person.h/2 - 6;
-      octx.fillText(label, person.cx - person.w/2, labelY > 12 ? labelY : 14);
+      matched[trailId]=true;used[trailId]=true;
+      var tt=trails[trailId],isP=(tt.persistCount||0)>=PERSIST_FRAMES,c=tt.score||0;
+      if(tt.counted){octx.strokeStyle='rgba(0,230,118,.7)';octx.lineWidth=3}
+      else if(isP){octx.strokeStyle='rgba(0,229,255,.7)';octx.lineWidth=2.5}
+      else{octx.strokeStyle='rgba(255,215,64,.4)';octx.lineWidth=1.5}
+      octx.strokeRect(person.cx-person.w/2,person.cy-person.h/2,person.w,person.h);
+      var label=(tt.counted?'\u2713 ':'')+Math.round(c*100)+'%';
+      octx.fillStyle=tt.counted?'rgba(0,230,118,.8)':isP?'rgba(0,229,255,.8)':'rgba(255,215,64,.6)';
+      octx.font='bold 11px sans-serif';var ly=person.cy-person.h/2-6;
+      octx.fillText(label,person.cx-person.w/2,ly>12?ly:14);
     }
-
-    // 清理过期追踪
-    var allKeys = Object.keys(trails);
-    for (var kk = 0; kk < allKeys.length; kk++) {
-      var tid = parseInt(allKeys[kk]);
-      if (!matched[tid]) {
-        trails[tid].life--;
-        if (trails[tid].life <= 0) {
-          delete trails[tid];
-          delete lastCountedFrame[tid];
-        }
-      }
-    }
-
-    // 画竖直线
-    var lineX = vw * COUNT_LINE;
-    octx.strokeStyle = 'rgba(0,229,255,.4)';
-    octx.lineWidth = 2;
-    octx.setLineDash([10, 8]);
-    octx.beginPath(); octx.moveTo(lineX, 0); octx.lineTo(lineX, vh); octx.stroke();
-    octx.setLineDash([]);
-    // 左右方向标注
-    octx.fillStyle = 'rgba(0,229,255,.5)';
-    octx.font = 'bold 13px sans-serif';
-    octx.fillText('\u25c6 \u8ba1\u6570\u7ebf', lineX - 70, 30);
-
-  } catch (e) {
-    console.error('Detection error:', e);
-    setStatus('检测出错: ' + (e.message || '未知错误'), false);
-  }
-
-  if (counting) {
-    requestAnimationFrame(function() { detectAI(); });
-  }
+    var allK=Object.keys(trails);
+    for(var kk=0;kk<allK.length;kk++){var tid=parseInt(allK[kk]);if(!matched[tid]){trails[tid].life--;if(trails[tid].life<=0){delete trails[tid];delete lastCountedFrame[tid]}}}
+    var lineX=vw*COUNT_LINE;
+    octx.strokeStyle='rgba(121,40,202,.4)';octx.lineWidth=1.5;octx.setLineDash([8,6]);
+    octx.beginPath();octx.moveTo(lineX,0);octx.lineTo(lineX,vh);octx.stroke();octx.setLineDash([]);
+    octx.fillStyle='rgba(121,40,202,.5)';octx.font='bold 11px sans-serif';octx.fillText('\u25c6 \u8ba1\u6570\u7ebf',lineX-60,26);
+  }catch(e){console.error(e);setStatus('检测出错: '+(e.message||'未知'),false)}
+  if(counting)requestAnimationFrame(function(){detectAI()});
 }
 
-// ============================================================
-//  UI
-// ============================================================
-function updateUI() {
-  document.getElementById('nTotal').textContent = totalCount;
+function updateUI(){document.getElementById('nTotal').textContent=totalCount}
+function flashCard(id){var c=document.getElementById(id),n=c.querySelector('.num');n.classList.add('pop');c.classList.add('flash');setTimeout(function(){n.classList.remove('pop');c.classList.remove('flash')},200)}
+function setStatus(m,s){document.getElementById('statusText').textContent=m;var d=document.getElementById('statusDot');d.className=s===true?'on':s==='loading'?'loading':''}
+function toggle(){
+  if(!modelLoaded){showToast('模型还在加载中...');return}
+  counting=!counting;var btn=document.getElementById('btnGo'),rec=document.getElementById('recDot'),line=document.getElementById('countLine');
+  if(counting){btn.textContent='\u23f8 \u6682\u505c';btn.classList.add('running');rec.classList.add('active');line.classList.add('active');setStatus('AI 检测中... '+currentFPS+' FPS',true);showToast('\u{1f534} AI 计数已开始');requestAnimationFrame(function(){detectAI()})}
+  else{btn.textContent='\u25b6 \u5f00\u59cb\u8ba1\u6570';btn.classList.remove('running');rec.classList.remove('active');line.classList.remove('active');setStatus('已暂停',false);saveHourly()}
 }
-function flashCard(id) {
-  var card = document.getElementById(id);
-  var num = card.querySelector('.num');
-  num.classList.add('pop'); card.classList.add('flash');
-  setTimeout(function() { num.classList.remove('pop'); card.classList.remove('flash'); }, 200);
-}
-function setStatus(msg, state) {
-  document.getElementById('statusText').textContent = msg;
-  var dot = document.getElementById('statusDot');
-  dot.className = state === true ? 'on' : state === 'loading' ? 'loading' : '';
-}
-
-function toggle() {
-  if (!modelLoaded) { showToast('\u23f3 \u6a21\u578b\u8fd8\u5728\u52a0\u8f7d\u4e2d...'); return; }
-  counting = !counting;
-  var btn = document.getElementById('btnGo');
-  var rec = document.getElementById('recDot');
-  var line = document.getElementById('countLine');
-
-  if (counting) {
-    btn.textContent = '\u23f8 \u6682\u505c';
-    btn.classList.add('running');
-    rec.classList.add('active');
-    line.classList.add('active');
-    setStatus('AI \u68c0\u6d4b\u4e2d... ' + currentFPS + ' FPS', true);
-    showToast('\u{1f534} AI \u8ba1\u6570\u5df2\u5f00\u59cb');
-    requestAnimationFrame(function() { detectAI(); });
-  } else {
-    btn.textContent = '\u25b6 \u5f00\u59cb\u8ba1\u6570';
-    btn.classList.remove('running');
-    rec.classList.remove('active');
-    line.classList.remove('active');
-    setStatus('\u5df2\u6682\u505c', false);
-    saveHourly();
-  }
-}
-
-function resetAll() {
-  totalCount = 0;
-  hourly = {};
-  trails = {}; nextTrailId = 0; frameNum = 0;
-  lastCountedFrame = {};
-  spatialCooldowns = {}; nextSpatialId = 0;
-  updateUI();
-  setStatus('\u5df2\u91cd\u7f6e', false);
-  showToast('\u21ba \u6570\u636e\u5df2\u6e05\u96f6');
-}
-
-function saveHourly() {
-  var h = new Date().getHours();
-  if (h !== currentHour) { currentHour = h; }
-  var key = h + ':00-' + (h+1) + ':00';
-  if (!hourly[key]) hourly[key] = 0;
-  hourly[key] = Math.max(hourly[key], totalCount);
-}
-
-// ============================================================
-//  倒计时
-// ============================================================
-function showTimerModal() {
-  document.getElementById('modal').classList.add('show');
-  document.getElementById('minInp').focus();
-}
-function startTimer() {
-  var min = parseInt(document.getElementById('minInp').value) || 60;
-  timerSeconds = min * 60; timerRemaining = timerSeconds;
-  document.getElementById('modal').classList.remove('show');
-  document.getElementById('timerBox').classList.add('active');
-  document.getElementById('timerCancel').classList.add('show');
-  updateTimerDisplay();
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = setInterval(function() {
-    timerRemaining--;
-    updateTimerDisplay();
-    if (timerRemaining <= 0) {
-      clearInterval(timerInterval); timerInterval = null;
-      document.getElementById('timerBox').classList.remove('active');
-      document.getElementById('timerCancel').classList.remove('show');
-      if (counting) toggle();
-      showToast('⏰ 计时结束！');
-      document.getElementById('timer').textContent = '--:--';
-      document.getElementById('timer').className = '';
-    }
-  }, 1000);
-}
-
-function cancelTimer() {
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  timerRemaining = 0;
-  document.getElementById('timer').textContent = '--:--';
-  document.getElementById('timer').className = '';
-  document.getElementById('timerBox').classList.remove('active');
-  document.getElementById('timerCancel').classList.remove('show');
-  showToast('计时已取消');
-}
-function updateTimerDisplay() {
-  var el = document.getElementById('timer');
-  if (timerRemaining > 0) {
-    var m = Math.floor(timerRemaining / 60), s = timerRemaining % 60;
-    el.textContent = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-    el.className = timerRemaining < 60 ? 'urgent' : timerRemaining < 300 ? 'warn' : '';
-  } else { el.textContent = '--:--'; el.className = ''; }
-}
-
-// ============================================================
-//  导出
-// ============================================================
-function exportExcel() {
-  saveHourly();
-  var hours = Object.keys(hourly).sort();
-  if (hours.length === 0) { showToast('暂无数据可导出'); return; }
-  var rows = [['时段', '人次']];
-  hours.forEach(function(h) {
-    rows.push([h, hourly[h] || 0]);
-  });
-  var total = hours.reduce(function(s,h){return s+(hourly[h]||0);}, 0);
-  rows.push(['合计', total]);
-  exportCSV(rows, '客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');
-  showToast('📊 CSV 已导出');
-}
-
-// ============================================================
-//  时钟
-// ============================================================
-function updateClock() {
-  document.getElementById('clockText').textContent =
-    new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-}
-setInterval(updateClock, 10000); updateClock();
-
-// ============================================================
-//  启动
-// ============================================================
-startCam();
-loadModel();
+function resetAll(){totalCount=0;hourly={};trails={};nextTrailId=0;frameNum=0;lastCountedFrame={};spatialCooldowns={};nextSpatialId=0;updateUI();setStatus('已重置',false);showToast('\u21ba \u6570\u636e\u5df2\u6e05\u96f6')}
+function saveHourly(){var h=new Date().getHours();if(h!==currentHour)currentHour=h;var k=h+':00-'+(h+1)+':00';if(!hourly[k])hourly[k]=0;hourly[k]=Math.max(hourly[k],totalCount)}
+function showTimerModal(){document.getElementById('modal').classList.add('show');document.getElementById('minInp').focus()}
+function startTimer(){var m=parseInt(document.getElementById('minInp').value)||60;timerSeconds=m*60;timerRemaining=timerSeconds;document.getElementById('modal').classList.remove('show');document.getElementById('timerBox').classList.add('active');document.getElementById('timerCancel').classList.add('show');updateTimerDisplay();if(timerInterval)clearInterval(timerInterval);timerInterval=setInterval(function(){timerRemaining--;updateTimerDisplay();if(timerRemaining<=0){clearInterval(timerInterval);timerInterval=null;document.getElementById('timerBox').classList.remove('active');document.getElementById('timerCancel').classList.remove('show');if(counting)toggle();showToast('\u23f0 \u8ba1\u65f6\u7ed3\u675f\uff01');document.getElementById('timer').textContent='--:--';document.getElementById('timer').className=''}},1000)}
+function cancelTimer(){if(timerInterval){clearInterval(timerInterval);timerInterval=null}timerRemaining=0;document.getElementById('timer').textContent='--:--';document.getElementById('timer').className='';document.getElementById('timerBox').classList.remove('active');document.getElementById('timerCancel').classList.remove('show');showToast('计时已取消')}
+function updateTimerDisplay(){var e=document.getElementById('timer');if(timerRemaining>0){var m=Math.floor(timerRemaining/60),s=timerRemaining%60;e.textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');e.className=timerRemaining<60?'urgent':timerRemaining<300?'warn':''}else{e.textContent='--:--';e.className=''}}
+function exportExcel(){saveHourly();var hours=Object.keys(hourly).sort();if(hours.length===0){showToast('暂无数据可导出');return}var rows=[['时段','人次']];hours.forEach(function(h){rows.push([h,hourly[h]||0])});var total=hours.reduce(function(s,h){return s+(hourly[h]||0)},0);rows.push(['合计',total]);exportCSV(rows,'客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');showToast('\u{1f4ca} CSV \u5df2\u5bfc\u51fa')}
+function updateClock(){document.getElementById('clockText').textContent=new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}
+setInterval(updateClock,10000);updateClock();
+startCam();loadModel();
 </script>
 </body>
 </html>
