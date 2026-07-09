@@ -119,9 +119,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 
 <div id="panel">
   <div id="stats">
-    <div class="statCard green" id="cardIn"><div class="num" id="nIn">0</div><div class="lbl">进入</div></div>
-    <div class="statCard" id="cardOut"><div class="num" id="nOut">0</div><div class="lbl">离开</div></div>
-    <div class="statCard gold" id="cardNet"><div class="num" id="nNet">0</div><div class="lbl">净流量</div></div>
+    <div class="statCard green" id="cardTotal">
+      <div class="num" id="nTotal">0</div>
+      <div class="lbl">总人次</div>
+    </div>
   </div>
   <div id="btns">
     <button class="btn btnStart" id="btnGo" disabled>⏳ 模型加载中</button>
@@ -175,7 +176,7 @@ function showToast(msg) {
 // ============================================================
 //  全局状态
 // ============================================================
-var countIn = 0, countOut = 0;
+var totalCount = 0;
 var counting = false, modelLoaded = false;
 var hourly = {}, currentHour = new Date().getHours();
 var timerSeconds = 0, timerRemaining = 0, timerInterval = null;
@@ -432,21 +433,15 @@ async function detectAI() {
           }
 
           if (!tooClose) {
-            // 竖直线：右→左跨越 = 进入，左→右跨越 = 离开
-            if (prevX > COUNT_LINE && curX <= COUNT_LINE) {
-              countIn++;
+            // 竖直线：任意方向跨线即计数一次
+            if ((prevX > COUNT_LINE && curX <= COUNT_LINE) ||
+                (prevX < COUNT_LINE && curX >= COUNT_LINE)) {
+              totalCount++;
               t.counted = true;
               lastCountedFrame[trailId] = frameNum;
               spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
-              updateUI(); saveHourly(); flashCard('cardIn');
-              setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut + ' | ' + currentFPS + ' FPS', true);
-            } else if (prevX < COUNT_LINE && curX >= COUNT_LINE) {
-              countOut++;
-              t.counted = true;
-              lastCountedFrame[trailId] = frameNum;
-              spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
-              updateUI(); saveHourly(); flashCard('cardOut');
-              setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut + ' | ' + currentFPS + ' FPS', true);
+              updateUI(); saveHourly(); flashCard('cardTotal');
+              setStatus('检测到: ' + totalCount + ' 人次 | ' + currentFPS + ' FPS', true);
             }
           }
         }
@@ -503,8 +498,7 @@ async function detectAI() {
     // 左右方向标注
     octx.fillStyle = 'rgba(0,229,255,.5)';
     octx.font = 'bold 13px sans-serif';
-    octx.fillText('\u25c0 \u8fdb\u5165', lineX - 80, 30);
-    octx.fillText('\u79bb\u5f00 \u25b6', lineX + 10, 30);
+    octx.fillText('\u25c6 \u8ba1\u6570\u7ebf', lineX - 70, 30);
 
   } catch (e) {
     console.error('Detection error:', e);
@@ -520,9 +514,7 @@ async function detectAI() {
 //  UI
 // ============================================================
 function updateUI() {
-  document.getElementById('nIn').textContent = countIn;
-  document.getElementById('nOut').textContent = countOut;
-  document.getElementById('nNet').textContent = countIn - countOut;
+  document.getElementById('nTotal').textContent = totalCount;
 }
 function flashCard(id) {
   var card = document.getElementById(id);
@@ -562,7 +554,7 @@ function toggle() {
 }
 
 function resetAll() {
-  countIn = 0; countOut = 0;
+  totalCount = 0;
   hourly = {};
   trails = {}; nextTrailId = 0; frameNum = 0;
   lastCountedFrame = {};
@@ -576,9 +568,8 @@ function saveHourly() {
   var h = new Date().getHours();
   if (h !== currentHour) { currentHour = h; }
   var key = h + ':00-' + (h+1) + ':00';
-  if (!hourly[key]) hourly[key] = { inCount: 0, outCount: 0 };
-  hourly[key].inCount = Math.max(hourly[key].inCount, countIn);
-  hourly[key].outCount = Math.max(hourly[key].outCount, countOut);
+  if (!hourly[key]) hourly[key] = 0;
+  hourly[key] = Math.max(hourly[key], totalCount);
 }
 
 // ============================================================
@@ -635,17 +626,15 @@ function updateTimerDisplay() {
 function exportExcel() {
   saveHourly();
   var hours = Object.keys(hourly).sort();
-  if (hours.length === 0) { showToast('\u6682\u65e0\u6570\u636e\u53ef\u5bfc\u51fa'); return; }
-  var rows = [['\u65f6\u6bb5', '\u8fdb\u5165', '\u79bb\u5f00', '\u51c0\u6d41\u91cf']];
+  if (hours.length === 0) { showToast('暂无数据可导出'); return; }
+  var rows = [['时段', '人次']];
   hours.forEach(function(h) {
-    var d = hourly[h];
-    rows.push([h, d.inCount||0, d.outCount||0, (d.inCount||0) - (d.outCount||0)]);
+    rows.push([h, hourly[h] || 0]);
   });
-  var ti = hours.reduce(function(s,h){return s+(hourly[h].inCount||0);}, 0);
-  var to = hours.reduce(function(s,h){return s+(hourly[h].outCount||0);}, 0);
-  rows.push(['\u5408\u8ba1', ti, to, ti - to]);
-  exportCSV(rows, '\u5ba2\u6d41\u7edf\u8ba1_'+new Date().toLocaleDateString('zh-CN')+'.csv');
-  showToast('\u{1f4ca} CSV \u5df2\u5bfc\u51fa');
+  var total = hours.reduce(function(s,h){return s+(hourly[h]||0);}, 0);
+  rows.push(['合计', total]);
+  exportCSV(rows, '客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');
+  showToast('📊 CSV 已导出');
 }
 
 // ============================================================
