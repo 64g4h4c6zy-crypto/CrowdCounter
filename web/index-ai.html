@@ -35,6 +35,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #clockText{color:var(--text-dim);font-size:13px;font-variant-numeric:tabular-nums}
 
 #timerBox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:15;text-align:center;pointer-events:none}
+#timerBox.active{pointer-events:auto}
+#timerCancel{display:none;margin-top:8px;padding:6px 16px;border-radius:16px;border:1px solid rgba(255,61,92,.4);background:rgba(255,61,92,.15);color:var(--red);font-size:12px;cursor:pointer;letter-spacing:.5px}
+#timerCancel.show{display:inline-block}
 #timer{font-size:56px;font-weight:200;color:var(--cyan);letter-spacing:4px;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(0,229,255,.3);transition:color .4s}
 #timer.warn{color:var(--gold);text-shadow:0 0 20px rgba(255,215,64,.4)}
 #timer.urgent{color:var(--red);text-shadow:0 0 20px rgba(255,61,92,.4);animation:shake .5s}
@@ -105,6 +108,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 <div id="timerBox">
   <div id="timer">--:--</div>
   <div id="timerLabel">倒计时</div>
+  <button id="timerCancel" onclick="cancelTimer()">✕ 取消计时</button>
 </div>
 
 <div id="loadingOverlay">
@@ -233,10 +237,12 @@ async function loadModel() {
     showToast('\u2705 AI \u6a21\u578b\u52a0\u8f7d\u5b8c\u6210');
   } catch (e) {
     console.error('Model load error:', e);
-    setStatus('\u6a21\u578b\u52a0\u8f7d\u5931\u8d25\uff1a' + (e.message || 'CDN \u8bbf\u95ee\u5931\u8d25\uff0c\u8bf7\u68af\u5b50\u540e\u5237\u65b0'), false);
-    showToast('\u274c \u6a21\u578b\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u68c2\u67e5\u68af\u5b50');
+    setStatus('模型加载失败：' + (e.message || 'CDN 访问失败，请梯子后刷新'), false);
+    showToast('❌ 模型加载失败，请检查梯子');
     document.getElementById('loadingOverlay').style.display = 'none';
-    document.getElementById('btnGo').textContent = '\u26a0 \u52a0\u8f7d\u5931\u8d25';
+    document.getElementById('btnGo').disabled = false;
+    document.getElementById('btnGo').textContent = '⚠ 加载失败（点击重试）';
+    document.getElementById('btnGo').onclick = function() { location.reload(); };
   }
 }
 
@@ -475,6 +481,7 @@ async function detectAI() {
 
   } catch (e) {
     console.error('Detection error:', e);
+    setStatus('检测出错: ' + (e.message || '未知错误'), false);
   }
 
   if (counting) {
@@ -558,6 +565,8 @@ function startTimer() {
   var min = parseInt(document.getElementById('minInp').value) || 60;
   timerSeconds = min * 60; timerRemaining = timerSeconds;
   document.getElementById('modal').classList.remove('show');
+  document.getElementById('timerBox').classList.add('active');
+  document.getElementById('timerCancel').classList.add('show');
   updateTimerDisplay();
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(function() {
@@ -565,12 +574,24 @@ function startTimer() {
     updateTimerDisplay();
     if (timerRemaining <= 0) {
       clearInterval(timerInterval); timerInterval = null;
+      document.getElementById('timerBox').classList.remove('active');
+      document.getElementById('timerCancel').classList.remove('show');
       if (counting) toggle();
-      showToast('\u23f0 \u8ba1\u65f6\u7ed3\u675f\uff01');
+      showToast('⏰ 计时结束！');
       document.getElementById('timer').textContent = '--:--';
       document.getElementById('timer').className = '';
     }
   }, 1000);
+}
+
+function cancelTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  timerRemaining = 0;
+  document.getElementById('timer').textContent = '--:--';
+  document.getElementById('timer').className = '';
+  document.getElementById('timerBox').classList.remove('active');
+  document.getElementById('timerCancel').classList.remove('show');
+  showToast('计时已取消');
 }
 function updateTimerDisplay() {
   var el = document.getElementById('timer');
