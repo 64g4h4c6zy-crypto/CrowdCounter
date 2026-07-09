@@ -227,17 +227,17 @@ html,body{
 <!-- 底部面板 -->
 <div id="panel">
   <div id="stats">
-    <div class="statCard" id="cardTotal">
-      <div class="num" id="nTotal">0</div>
-      <div class="lbl">总人次</div>
+    <div class="statCard green" id="cardIn">
+      <div class="num" id="nIn">0</div>
+      <div class="lbl">进入</div>
     </div>
-    <div class="statCard gold" id="cardYoung">
-      <div class="num" id="nYoung">0</div>
-      <div class="lbl">年轻人</div>
+    <div class="statCard" id="cardOut">
+      <div class="num" id="nOut">0</div>
+      <div class="lbl">离开</div>
     </div>
-    <div class="statCard green" id="cardHour">
-      <div class="num" id="nHour">0</div>
-      <div class="lbl">本小时</div>
+    <div class="statCard gold" id="cardNet">
+      <div class="num" id="nNet">0</div>
+      <div class="lbl">净流量</div>
     </div>
   </div>
   <div id="btns">
@@ -302,7 +302,8 @@ function showToast(msg) {
 // ============================================================
 //  全局状态
 // ============================================================
-var totalCount = 0, youngCount = 0, hourCount = 0;
+var countIn = 0, countOut = 0;   // 进入 / 离开
+var youngCount = 0, hourIn = 0, hourOut = 0;
 var counting = false;
 var hourly = {}, currentHour = new Date().getHours();
 var timerSeconds = 0, timerRemaining = 0, timerInterval = null;
@@ -311,21 +312,30 @@ var video = document.getElementById('cam');
 var overlay = document.getElementById('overlay');
 var octx = overlay.getContext('2d');
 
-// 帧差法参数
-var REFRESH_REF_EVERY = 40;
-var COUNT_LINE = 0.55;
-var MIN_BLOB_SIZE = 120;
-var DIFF_THRESHOLD = 28;
-var PROCESS_W = 480;
+// ============================================================
+//  帧差法参数（可调优）
+// ============================================================
+var DIFF_THRESHOLD = 28;       // 基础帧差阈值（会被自适应调整）
+var MIN_BLOB_SIZE = 100;       // 最小团块像素数（降到 100，结合持续性验证过滤噪点）
+var MAX_ASPECT_RATIO = 0.65;   // 最大宽高比（宽/高 > 0.65 → 非人形，如购物车/横影）
+var PERSIST_FRAMES = 3;        // 持续性验证：连续 N 帧检测到才确认为有效目标
+var COOLDOWN_FRAMES = 20;      // 计数冷却（同一目标 N 帧内不可重复计数）
+var REFRESH_REF_EVERY = 30;    // 参考帧刷新间隔（更频繁以适应光照变化）
+var COUNT_LINE = 0.55;         // 计数线位置（画面 55% = 门框中线）
+var PROCESS_W = 480;           // 检测处理宽度
+var TRACK_MAX_GAP = 70;        // 团块追踪最大间距（像素，在 PROCESS_W 坐标系下）
 
 var refFrame = null;
 var frameNum = 0;
-var blobTrails = {};
+var blobTrails = {};           // id → {cx,cy,vx,vy,prevCx,prevCy,counted,life,persistCount}
 var nextTrailId = 0;
 
 // 离屏 canvas 用于检测处理（低分辨率）
 var offscreen = document.createElement('canvas');
 var offCtx = offscreen.getContext('2d');
+
+// 自适应阈值用：滑动平均
+var runningBrightness = 128;   // 0-255 滑动平均亮度
 
 // ============================================================
 //  摄像头 —— 高分辨率 + 安卓兼容
@@ -520,7 +530,7 @@ function tryNextConstraint(attempts, index) {
 }
 
 // ============================================================
-//  BFS 连通域分析
+//  BFS 连通域分析（含宽高比信息）
 // ============================================================
 function findBlobs(mask, w, h) {
   var visited = new Uint8Array(w * h);
@@ -548,7 +558,16 @@ function findBlobs(mask, w, h) {
           }
         }
         if (area >= MIN_BLOB_SIZE) {
-          blobs.push({ cx: (minX+maxX)/2, cy: (minY+maxY)/2, w: maxX-minX, h: maxY-minY, area: area });
+          var bw = maxX - minX + 1, bh = maxY - minY + 1;
+          var aspectRatio = bw / Math.max(bh, 1);
+          // 宽高比过滤：人形 ≈ 0.3~0.6，横宽（购物车、并排的人）排除或降低优先级
+          blobs.push({
+            cx: (minX + maxX) / 2,
+            cy: (minY + maxY) / 2,
+            w: bw, h: bh,
+            area: area,
+            aspectRatio: aspectRatio
+          });
         }
       }
     }
@@ -557,21 +576,41 @@ function findBlobs(mask, w, h) {
 }
 
 // ============================================================
-//  主检测循环
+//  主检测循环（5 项改进）
+//  ① 方向向量判定（Δx, Δy → 进/出）
+//  ② 速度预测追踪（vx, vy 预测下一帧位置）
+//  ③ 宽高比过滤（排除购物车/横影）
+//  ④ 持续性验证（连续 N 帧确认）
+//  ⑤ 自适应阈值（根据亮度动态调整）
 // ============================================================
+var lastCountedFrame = {};  // trailId → frameNum，防重复计数
+
 function detect() {
   if (!counting) return;
 
   var vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) { requestAnimationFrame(detect); return; }
 
-  // 离屏处理画布（降采样到 PROCESS_W 宽度，等比缩放）
+  // 离屏处理画布（降采样）
   var scale = PROCESS_W / vw;
   var pw = PROCESS_W;
   var ph = Math.round(vh * scale);
   offscreen.width = pw; offscreen.height = ph;
   offCtx.drawImage(video, 0, 0, pw, ph);
   var frame = offCtx.getImageData(0, 0, pw, ph);
+
+  // ── ⑤ 自适应阈值：计算当前帧平均亮度 ──
+  var sumBright = 0, pixelCount = frame.data.length / 4;
+  for (var bi = 0; bi < frame.data.length; bi += 4) {
+    sumBright += (frame.data[bi] + frame.data[bi+1] + frame.data[bi+2]) / 3;
+  }
+  var currentBrightness = sumBright / pixelCount;
+  runningBrightness = runningBrightness * 0.9 + currentBrightness * 0.1; // 指数滑动平均
+
+  // 阈值随亮度自适应：暗场景降低阈值，亮场景提高
+  var brightnessRatio = runningBrightness / 128;  // 1.0 = 中灰
+  var adaptiveThreshold = DIFF_THRESHOLD * brightnessRatio;
+  adaptiveThreshold = Math.max(15, Math.min(45, adaptiveThreshold)); // 钳位 [15, 45]
 
   // 初始化/刷新参考帧
   if (!refFrame || frameNum % REFRESH_REF_EVERY === 0) {
@@ -588,52 +627,96 @@ function detect() {
     var dr = Math.abs(frame.data[i] - refFrame.data[i]);
     var dg = Math.abs(frame.data[i+1] - refFrame.data[i+1]);
     var db = Math.abs(frame.data[i+2] - refFrame.data[i+2]);
-    mask[i/4] = ((dr + dg + db) / 3) > DIFF_THRESHOLD ? 1 : 0;
+    mask[i/4] = Math.max(dr, dg, db) > adaptiveThreshold ? 1 : 0;
   }
 
   // 找团块
   var blobs = findBlobs(mask, pw, ph);
 
-  // 叠加层画布（全分辨率画框）
+  // ── ③ 宽高比过滤 ──
+  var validBlobs = [];
+  for (var vb = 0; vb < blobs.length; vb++) {
+    if (blobs[vb].aspectRatio <= MAX_ASPECT_RATIO) {
+      validBlobs.push(blobs[vb]);
+    }
+  }
+
+  // 叠加层画布
   overlay.width = vw; overlay.height = vh;
 
   var matched = {};
-  for (var b = 0; b < blobs.length; b++) {
-    var blob = blobs[b];
-    // 将检测坐标映射回全分辨率
+  var nowFrame = frameNum;
+
+  for (var b = 0; b < validBlobs.length; b++) {
+    var blob = validBlobs[b];
     var bx = blob.cx / scale, by = blob.cy / scale;
     var bw = blob.w / scale, bh = blob.h / scale;
 
+    // ── ② 速度预测追踪 ──
     var trailId = null;
-    var bestDist = 60;
+    var bestDist = TRACK_MAX_GAP;
     var keys = Object.keys(blobTrails);
     for (var k = 0; k < keys.length; k++) {
       var id = parseInt(keys[k]);
       var t = blobTrails[id];
-      var dx = bx - t.cx, dy = by - t.cy;
+      // 预测下一帧位置：predX = cx + vx, predY = cy + vy
+      var predCx = t.cx + (t.vx || 0);
+      var predCy = t.cy + (t.vy || 0);
+      var dx = bx - predCx, dy = by - predCy;
       var dist = Math.sqrt(dx*dx + dy*dy);
       if (dist < bestDist) { bestDist = dist; trailId = id; }
     }
 
     if (trailId === null) {
+      // 新团块——初始化追踪，暂不计入有效目标
       trailId = nextTrailId++;
-      blobTrails[trailId] = { cx: bx, cy: by, prevCy: by, counted: false, life: 10 };
+      blobTrails[trailId] = {
+        cx: bx, cy: by, prevCx: bx, prevCy: by,
+        vx: 0, vy: 0,
+        counted: false, life: 10,
+        persistCount: 1           // ④ 持续性计数从 1 开始
+      };
     } else {
       var t = blobTrails[trailId];
+      // ── ② 更新速度向量 ──
+      t.vx = bx - t.cx;
+      t.vy = by - t.cy;
+      t.prevCx = t.cx;
       t.prevCy = t.cy;
       t.cx = bx; t.cy = by;
       t.life = 10;
+      // ── ④ 持续性验证 ──
+      t.persistCount = Math.min((t.persistCount || 0) + 1, PERSIST_FRAMES + 1);
 
-      if (!t.counted) {
-        var py = t.prevCy / vh, cy = by / vh;
-        if (py < COUNT_LINE && cy >= COUNT_LINE) {
-          totalCount++; hourCount++;
-          if (Math.random() < 0.15) youngCount++;
+      // ── ① 方向向量判定进/出 ──
+      // 只有持续性达标且未计数且冷却已过的目标才判定
+      var isPersistent = t.persistCount >= PERSIST_FRAMES;
+      var cooldownPassed = !lastCountedFrame[trailId] ||
+                           (nowFrame - lastCountedFrame[trailId]) > COOLDOWN_FRAMES;
+
+      if (!t.counted && isPersistent && cooldownPassed) {
+        var prevY = t.prevCy / vh, curY = t.cy / vh;
+        var prevX = t.prevCx / vw, curX = t.cx / vw;
+
+        // 跨越计数线检测
+        if (prevY < COUNT_LINE && curY >= COUNT_LINE) {
+          // 从上往下 → 进入
+          countIn++; hourIn++;
           t.counted = true;
+          lastCountedFrame[trailId] = nowFrame;
           updateUI();
           saveHourly();
-          flashCard('cardTotal');
-          setStatus('检测到: ' + totalCount + ' 人次', true);
+          flashCard('cardIn');
+          setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut, true);
+        } else if (prevY > COUNT_LINE && curY <= COUNT_LINE) {
+          // 从下往上 → 离开
+          countOut++; hourOut++;
+          t.counted = true;
+          lastCountedFrame[trailId] = nowFrame;
+          updateUI();
+          saveHourly();
+          flashCard('cardOut');
+          setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut, true);
         }
       }
     }
@@ -641,14 +724,37 @@ function detect() {
 
     // 画检测框
     var tt = blobTrails[trailId];
-    octx.strokeStyle = tt.counted ? 'rgba(0,230,118,.7)' : 'rgba(255,215,64,.7)';
-    octx.lineWidth = 2;
+    var isPersistent = (tt.persistCount || 0) >= PERSIST_FRAMES;
+
+    if (tt.counted) {
+      octx.strokeStyle = 'rgba(0,230,118,.7)';  // 绿色=已计数
+    } else if (isPersistent) {
+      octx.strokeStyle = 'rgba(0,229,255,.7)';  // 青色=持续追踪中
+    } else {
+      octx.strokeStyle = 'rgba(255,215,64,.4)'; // 淡金=验证中
+    }
+    octx.lineWidth = isPersistent ? 2.5 : 1.5;
     octx.strokeRect(bx - bw/2, by - bh/2, bw, bh);
 
     if (tt.counted) {
       octx.fillStyle = 'rgba(0,230,118,.8)';
-      octx.font = '11px sans-serif';
+      octx.font = 'bold 12px sans-serif';
       octx.fillText('\u2713', bx + bw/2 + 4, by - bh/2 + 14);
+    } else if (isPersistent) {
+      // 画运动方向线
+      var vx = tt.vx || 0, vy = tt.vy || 0;
+      if (Math.abs(vx) > 1 || Math.abs(vy) > 1) {
+        octx.strokeStyle = 'rgba(0,229,255,.3)';
+        octx.lineWidth = 1;
+        octx.beginPath();
+        octx.moveTo(bx, by);
+        octx.lineTo(bx + vx * 2, by + vy * 2);
+        octx.stroke();
+      }
+      // 持久性指示器
+      octx.fillStyle = 'rgba(0,229,255,.6)';
+      octx.font = '9px sans-serif';
+      octx.fillText(tt.persistCount + '/' + PERSIST_FRAMES, bx - bw/2, by - bh/2 - 3);
     }
   }
 
@@ -658,14 +764,10 @@ function detect() {
     var tid = parseInt(allKeys[kk]);
     if (!matched[tid]) {
       blobTrails[tid].life--;
-      if (blobTrails[tid].life <= 0) delete blobTrails[tid];
-    }
-  }
-  allKeys = Object.keys(blobTrails);
-  for (var kk2 = 0; kk2 < allKeys.length; kk2++) {
-    var tid2 = parseInt(allKeys[kk2]);
-    if (blobTrails[tid2] && blobTrails[tid2].counted && !matched[tid2] && blobTrails[tid2].life < 5) {
-      delete blobTrails[tid2];
+      if (blobTrails[tid].life <= 0) {
+        delete blobTrails[tid];
+        delete lastCountedFrame[tid];
+      }
     }
   }
 
@@ -680,6 +782,12 @@ function detect() {
   octx.stroke();
   octx.setLineDash([]);
 
+  // 画进/出箭头指示
+  octx.fillStyle = 'rgba(0,229,255,.5)';
+  octx.font = '14px sans-serif';
+  octx.fillText('\u25b2 \u8fdb\u5165', 10, lineY - 10);
+  octx.fillText('\u25bc \u79bb\u5f00', 10, lineY + 22);
+
   requestAnimationFrame(detect);
 }
 
@@ -687,9 +795,9 @@ function detect() {
 //  UI 更新
 // ============================================================
 function updateUI() {
-  document.getElementById('nTotal').textContent = totalCount;
-  document.getElementById('nYoung').textContent = youngCount;
-  document.getElementById('nHour').textContent = hourCount;
+  document.getElementById('nIn').textContent = countIn;
+  document.getElementById('nOut').textContent = countOut;
+  document.getElementById('nNet').textContent = countIn - countOut;
 }
 
 function flashCard(id) {
@@ -734,9 +842,10 @@ function toggle() {
 }
 
 function resetAll() {
-  totalCount = 0; youngCount = 0; hourCount = 0;
+  countIn = 0; countOut = 0; hourIn = 0; hourOut = 0;
   hourly = {}; refFrame = null;
   blobTrails = {}; nextTrailId = 0; frameNum = 0;
+  lastCountedFrame = {};
   updateUI();
   setStatus('已重置', false);
   showToast('\u21ba 数据已清零');
@@ -744,11 +853,11 @@ function resetAll() {
 
 function saveHourly() {
   var h = new Date().getHours();
-  if (h !== currentHour) { currentHour = h; hourCount = 0; }
+  if (h !== currentHour) { currentHour = h; hourIn = 0; hourOut = 0; }
   var key = h + ':00-' + (h+1) + ':00';
-  if (!hourly[key]) hourly[key] = { total: 0, young: 0 };
-  hourly[key].total = Math.max(hourly[key].total, totalCount);
-  hourly[key].young = Math.max(hourly[key].young, youngCount);
+  if (!hourly[key]) hourly[key] = { inCount: 0, outCount: 0 };
+  hourly[key].inCount = Math.max(hourly[key].inCount, countIn);
+  hourly[key].outCount = Math.max(hourly[key].outCount, countOut);
 }
 
 // ============================================================
@@ -798,15 +907,16 @@ function exportExcel() {
   saveHourly();
   var hours = Object.keys(hourly).sort();
   if (hours.length === 0) { showToast('暂无数据可导出'); return; }
-  var rows = [['时段', '总人次', '年轻人次', '年轻占比']];
+  var rows = [['时段', '进入', '离开', '净流量']];
   hours.forEach(function(h) {
     var d = hourly[h];
-    rows.push([h, d.total||0, d.young||0, d.total>0 ? ((d.young||0)/d.total*100).toFixed(1)+'%' : '0%']);
+    var net = (d.inCount||0) - (d.outCount||0);
+    rows.push([h, d.inCount||0, d.outCount||0, net]);
   });
-  var ti = hours.reduce(function(s,h){return s+(hourly[h].total||0);}, 0);
-  var ty = hours.reduce(function(s,h){return s+(hourly[h].young||0);}, 0);
-  rows.push(['合计', ti, ty, ti>0 ? (ty/ti*100).toFixed(1)+'%' : '0%']);
-  exportCSV(rows, '\u5ba2\u6d41\u7edf\u8ba1_'+new Date().toLocaleDateString('zh-CN')+'.csv');
+  var ti = hours.reduce(function(s,h){return s+(hourly[h].inCount||0);}, 0);
+  var to = hours.reduce(function(s,h){return s+(hourly[h].outCount||0);}, 0);
+  rows.push(['合计', ti, to, ti - to]);
+  exportCSV(rows, '客流统计_'+new Date().toLocaleDateString('zh-CN')+'.csv');
   showToast('\u{1f4ca} CSV \u5df2\u5bfc\u51fa\uff08\u53ef\u7528 Excel \u6253\u5f00\uff09');
 }
 
