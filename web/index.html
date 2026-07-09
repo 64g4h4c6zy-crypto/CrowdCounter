@@ -315,15 +315,19 @@ var octx = overlay.getContext('2d');
 // ============================================================
 //  帧差法参数（可调优）
 // ============================================================
-var DIFF_THRESHOLD = 28;       // 基础帧差阈值（会被自适应调整）
-var MIN_BLOB_SIZE = 100;       // 最小团块像素数（降到 100，结合持续性验证过滤噪点）
-var MAX_ASPECT_RATIO = 0.65;   // 最大宽高比（宽/高 > 0.65 → 非人形，如购物车/横影）
-var PERSIST_FRAMES = 3;        // 持续性验证：连续 N 帧检测到才确认为有效目标
-var COOLDOWN_FRAMES = 20;      // 计数冷却（同一目标 N 帧内不可重复计数）
-var REFRESH_REF_EVERY = 30;    // 参考帧刷新间隔（更频繁以适应光照变化）
-var COUNT_LINE = 0.55;         // 计数线位置（画面 55% = 门框中线）
+var DIFF_THRESHOLD = 35;       // 基础帧差阈值 ↑28→35（降低微动敏感度）
+var MIN_BLOB_SIZE = 250;       // 最小团块像素数 ↑100→250（过滤相机抖动噪点）
+var MIN_BLOB_AREA = 400;       // 最小团块面积 ↑新增（进一步过滤碎片）
+var MAX_ASPECT_RATIO = 0.60;   // 最大宽高比 ↓0.65→0.60（更严格的人形筛选）
+var PERSIST_FRAMES = 5;        // 持续性验证 ↑3→5（更长的确认时间）
+var COOLDOWN_FRAMES = 45;      // 计数冷却 ↑20→45（防止重复计数）
+var SPATIAL_COOLDOWN = 80;     // 空间冷却：像素距离内不再计数 ↑新增
+var REFRESH_REF_EVERY = 25;    // 参考帧刷新间隔 ↓30→25（更快适应场景变化）
+var COUNT_LINE = 0.55;         // 计数线位置
 var PROCESS_W = 480;           // 检测处理宽度
-var TRACK_MAX_GAP = 70;        // 团块追踪最大间距（像素，在 PROCESS_W 坐标系下）
+var TRACK_MAX_GAP = 100;       // 团块追踪最大间距 ↑70→100（防止团块裂开导致多 ID）
+var SHAKE_BLOB_LIMIT = 10;     // 抖动检测：超过此数量的团块视为抖动 ↑新增
+var SHAKE_SUPPRESS_MS = 800;   // 抖动抑制时间 ↑新增
 
 var refFrame = null;
 var frameNum = 0;
@@ -336,6 +340,13 @@ var offCtx = offscreen.getContext('2d');
 
 // 自适应阈值用：滑动平均
 var runningBrightness = 128;   // 0-255 滑动平均亮度
+
+// 抖动抑制
+var lastShakeTime = 0;
+
+// 空间冷却：记录最近计数位置，防止同一人裂成多个团块重复计数
+var spatialCooldowns = {};     // key → {x, y, time}
+var nextSpatialId = 0;
 
 // ============================================================
 //  摄像头 —— 高分辨率 + 安卓兼容
@@ -557,7 +568,7 @@ function findBlobs(mask, w, h) {
             }
           }
         }
-        if (area >= MIN_BLOB_SIZE) {
+        if (area >= MIN_BLOB_SIZE && area >= MIN_BLOB_AREA) {
           var bw = maxX - minX + 1, bh = maxY - minY + 1;
           var aspectRatio = bw / Math.max(bh, 1);
           // 宽高比过滤：人形 ≈ 0.3~0.6，横宽（购物车、并排的人）排除或降低优先级
@@ -641,8 +652,22 @@ function detect() {
     }
   }
 
+  // ── 抖动检测：团块数量异常多 → 相机在晃动 → 暂时抑制 ──
+  var isShaking = validBlobs.length > SHAKE_BLOB_LIMIT;
+  if (isShaking) {
+    lastShakeTime = Date.now();
+  }
+  var shakeActive = (Date.now() - lastShakeTime) < SHAKE_SUPPRESS_MS;
+
   // 叠加层画布
   overlay.width = vw; overlay.height = vh;
+
+  // 抖动时画提示
+  if (shakeActive) {
+    octx.fillStyle = 'rgba(255,61,92,.6)';
+    octx.font = 'bold 16px sans-serif';
+    octx.fillText('\u26a0 \u76f8\u673a\u6643\u52a8\uff0c\u6682\u505c\u8ba1\u6570', 20, 40);
+  }
 
   var matched = {};
   var nowFrame = frameNum;
@@ -694,29 +719,48 @@ function detect() {
       var cooldownPassed = !lastCountedFrame[trailId] ||
                            (nowFrame - lastCountedFrame[trailId]) > COOLDOWN_FRAMES;
 
-      if (!t.counted && isPersistent && cooldownPassed) {
+      if (!t.counted && isPersistent && cooldownPassed && !shakeActive) {
         var prevY = t.prevCy / vh, curY = t.cy / vh;
-        var prevX = t.prevCx / vw, curX = t.cx / vw;
 
-        // 跨越计数线检测
-        if (prevY < COUNT_LINE && curY >= COUNT_LINE) {
-          // 从上往下 → 进入
-          countIn++; hourIn++;
-          t.counted = true;
-          lastCountedFrame[trailId] = nowFrame;
-          updateUI();
-          saveHourly();
-          flashCard('cardIn');
-          setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut, true);
-        } else if (prevY > COUNT_LINE && curY <= COUNT_LINE) {
-          // 从下往上 → 离开
-          countOut++; hourOut++;
-          t.counted = true;
-          lastCountedFrame[trailId] = nowFrame;
-          updateUI();
-          saveHourly();
-          flashCard('cardOut');
-          setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut, true);
+        // ── 空间冷却：同一位置附近刚计数过 → 跳过 ──
+        var tooClose = false;
+        var scKeys = Object.keys(spatialCooldowns);
+        for (var sc = 0; sc < scKeys.length; sc++) {
+          var scKey = scKeys[sc];
+          var scData = spatialCooldowns[scKey];
+          if (Date.now() - scData.time < 3000) {
+            var sdx = t.cx - scData.x, sdy = t.cy - scData.y;
+            if (Math.sqrt(sdx*sdx + sdy*sdy) < SPATIAL_COOLDOWN) {
+              tooClose = true;
+              break;
+            }
+          } else {
+            delete spatialCooldowns[scKey];
+          }
+        }
+
+        if (!tooClose) {
+          // 跨越计数线检测
+          if (prevY < COUNT_LINE && curY >= COUNT_LINE) {
+            // 从上往下 → 进入
+            countIn++; hourIn++;
+            t.counted = true;
+            lastCountedFrame[trailId] = nowFrame;
+            spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
+            updateUI();
+            saveHourly();
+            flashCard('cardIn');
+          } else if (prevY > COUNT_LINE && curY <= COUNT_LINE) {
+            // 从下往上 → 离开
+            countOut++; hourOut++;
+            t.counted = true;
+            lastCountedFrame[trailId] = nowFrame;
+            spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
+            updateUI();
+            saveHourly();
+            flashCard('cardOut');
+          }
+          setStatus('进入: ' + countIn + ' | 离开: ' + countOut, true);
         }
       }
     }
@@ -846,6 +890,8 @@ function resetAll() {
   hourly = {}; refFrame = null;
   blobTrails = {}; nextTrailId = 0; frameNum = 0;
   lastCountedFrame = {};
+  spatialCooldowns = {}; nextSpatialId = 0;
+  lastShakeTime = 0;
   updateUI();
   setStatus('已重置', false);
   showToast('\u21ba 数据已清零');
