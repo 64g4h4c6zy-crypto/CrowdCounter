@@ -22,8 +22,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-famil
 #overlay{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;pointer-events:none}
 
 #countLine{
-  position:absolute;top:55%;left:3%;right:3%;height:2px;z-index:6;pointer-events:none;
-  background:linear-gradient(90deg,transparent,var(--cyan) 20%,var(--cyan) 80%,transparent);
+  position:absolute;top:3%;bottom:3%;left:55%;width:2px;z-index:6;pointer-events:none;
+  background:linear-gradient(180deg,transparent,var(--cyan) 20%,var(--cyan) 80%,transparent);
   box-shadow:0 0 16px rgba(0,229,255,.4);transition:box-shadow .3s;
 }
 #countLine.active{box-shadow:0 0 28px var(--cyan)}
@@ -195,7 +195,7 @@ var spatialCooldowns = {};
 var nextSpatialId = 0;
 
 // 参数
-var COUNT_LINE = 0.55;
+var COUNT_LINE = 0.55;     // 竖直线位置（画面 55% 宽度处，即中线偏右）
 var IOU_THRESHOLD = 0.3;    // IOU 匹配阈值
 var PERSIST_FRAMES = 3;     // 持续性验证
 var COOLDOWN_FRAMES = 30;   // 计数冷却（帧数）
@@ -414,7 +414,7 @@ async function detectAI() {
                              (frameNum - lastCountedFrame[trailId]) > COOLDOWN_FRAMES;
 
         if (!t.counted && isPersistent && cooldownPassed) {
-          var prevY = t.prevCy / vh, curY = t.cy / vh;
+          var prevX = t.prevCx / vw, curX = t.cx / vw;
 
           // 空间冷却检查
           var tooClose = false;
@@ -432,14 +432,15 @@ async function detectAI() {
           }
 
           if (!tooClose) {
-            if (prevY < COUNT_LINE && curY >= COUNT_LINE) {
+            // 竖直线：右→左跨越 = 进入，左→右跨越 = 离开
+            if (prevX > COUNT_LINE && curX <= COUNT_LINE) {
               countIn++;
               t.counted = true;
               lastCountedFrame[trailId] = frameNum;
               spatialCooldowns['sc' + (nextSpatialId++)] = { x: t.cx, y: t.cy, time: Date.now() };
               updateUI(); saveHourly(); flashCard('cardIn');
               setStatus('\u8fdb\u5165: ' + countIn + ' | \u79bb\u5f00: ' + countOut + ' | ' + currentFPS + ' FPS', true);
-            } else if (prevY > COUNT_LINE && curY <= COUNT_LINE) {
+            } else if (prevX < COUNT_LINE && curX >= COUNT_LINE) {
               countOut++;
               t.counted = true;
               lastCountedFrame[trailId] = frameNum;
@@ -492,17 +493,18 @@ async function detectAI() {
       }
     }
 
-    // 画计数线
-    var lineY = vh * COUNT_LINE;
+    // 画竖直线
+    var lineX = vw * COUNT_LINE;
     octx.strokeStyle = 'rgba(0,229,255,.4)';
     octx.lineWidth = 2;
     octx.setLineDash([10, 8]);
-    octx.beginPath(); octx.moveTo(0, lineY); octx.lineTo(vw, lineY); octx.stroke();
+    octx.beginPath(); octx.moveTo(lineX, 0); octx.lineTo(lineX, vh); octx.stroke();
     octx.setLineDash([]);
+    // 左右方向标注
     octx.fillStyle = 'rgba(0,229,255,.5)';
-    octx.font = '13px sans-serif';
-    octx.fillText('\u25b2 \u8fdb\u5165', 10, lineY - 8);
-    octx.fillText('\u25bc \u79bb\u5f00', 10, lineY + 20);
+    octx.font = 'bold 13px sans-serif';
+    octx.fillText('\u25c0 \u8fdb\u5165', lineX - 80, 30);
+    octx.fillText('\u79bb\u5f00 \u25b6', lineX + 10, 30);
 
   } catch (e) {
     console.error('Detection error:', e);
