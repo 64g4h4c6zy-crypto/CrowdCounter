@@ -208,41 +208,66 @@ var lastDetectTime = 0;
 var fpsFrames = 0, fpsTime = Date.now(), currentFPS = 0;
 
 // ============================================================
-//  加载 AI 模型
+//  加载 AI 模型（15秒超时保护）
 // ============================================================
+var loadAttempted = false;
+
 async function loadModel() {
+  if (loadAttempted) return;
+  loadAttempted = true;
+
+  // 15秒超时
+  var timeoutHandle = setTimeout(function() {
+    if (!modelLoaded) {
+      setStatus('模型加载超时 · 请确认梯子已开启后刷新', false);
+      showToast('⏰ 加载超时，请刷新重试');
+      document.getElementById('loadingOverlay').style.display = 'none';
+      document.getElementById('btnGo').disabled = false;
+      document.getElementById('btnGo').textContent = '🔄 点击刷新重试';
+      document.getElementById('btnGo').onclick = function() { location.reload(); };
+    }
+  }, 15000);
+
   try {
-    setStatus('正在加载 COCO-SSD 模型...', 'loading');
-    showToast('\u23f3 \u6b63\u5728\u4e0b\u8f7d AI \u6a21\u578b (~2.5MB)...');
+    // 检查全局变量是否存在
+    if (typeof cocoSsd === 'undefined') {
+      throw new Error('COCO-SSD 库未加载，请确认梯子已连接');
+    }
+    if (typeof tf === 'undefined') {
+      throw new Error('TensorFlow.js 库未加载');
+    }
 
-    // 等待 TensorFlow.js 就绪
-    await tf.ready();
+    setStatus('正在下载 AI 模型 (~2.5MB)...', 'loading');
+    showToast('⏳ AI 模型下载中，请稍候...');
 
-    // 加载 COCO-SSD lite 模型
-    model = await cocoSsd.load({
-      base: 'lite_mobilenet_v2'
-    });
+    // 加载模型
+    model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
 
+    clearTimeout(timeoutHandle);
     modelLoaded = true;
     document.getElementById('loadingOverlay').style.display = 'none';
     document.getElementById('btnGo').disabled = false;
-    document.getElementById('btnGo').textContent = '\u25b6 \u5f00\u59cb\u8ba1\u6570';
+    document.getElementById('btnGo').textContent = '▶ 开始计数';
+    document.getElementById('btnGo').onclick = toggle;
 
-    // 预热：跑一次空推理
-    var warmupCanvas = document.createElement('canvas');
-    warmupCanvas.width = 300; warmupCanvas.height = 300;
-    await model.detect(warmupCanvas);
+    setStatus('AI 模型就绪 · 点击「开始计数」启动', false);
+    showToast('✅ AI 模型加载完成');
+    document.getElementById('statusDot').classList.remove('loading');
 
-    setStatus('AI 模型就绪 \u00b7 \u70b9\u51fb\u300c\u5f00\u59cb\u8ba1\u6570\u300d\u542f\u52a8', false);
-    showToast('\u2705 AI \u6a21\u578b\u52a0\u8f7d\u5b8c\u6210');
   } catch (e) {
+    clearTimeout(timeoutHandle);
     console.error('Model load error:', e);
-    setStatus('模型加载失败：' + (e.message || 'CDN 访问失败，请梯子后刷新'), false);
-    showToast('❌ 模型加载失败，请检查梯子');
+    var msg = e.message || '未知错误';
+    if (msg.indexOf('Failed to fetch') !== -1 || msg.indexOf('NetworkError') !== -1) {
+      msg = '网络不通，请确认梯子已连接后刷新';
+    }
+    setStatus('加载失败：' + msg, false);
+    showToast('❌ ' + msg);
     document.getElementById('loadingOverlay').style.display = 'none';
     document.getElementById('btnGo').disabled = false;
-    document.getElementById('btnGo').textContent = '⚠ 加载失败（点击重试）';
+    document.getElementById('btnGo').textContent = '🔄 点击刷新重试';
     document.getElementById('btnGo').onclick = function() { location.reload(); };
+    document.getElementById('statusDot').classList.remove('loading');
   }
 }
 
